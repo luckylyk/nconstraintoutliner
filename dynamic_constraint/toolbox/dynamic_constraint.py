@@ -121,10 +121,9 @@ class DynamicConstraint(object):
     def rename_node_from_components(self):
         parent = self.parent
         nice_name = self.nice_name
-        shape_name = nice_name + 'Shape'
-        cmds.rename(self._node, shape_name)
+        new_node_name = cmds.rename(self._node, nice_name + 'Shape')
         cmds.rename(parent, nice_name)
-        self._node = nice_name
+        self._node = new_node_name
 
     def set_type(self, constraint_type):
         attribute = self._node + '.' + TYPE_ATTR_NAME
