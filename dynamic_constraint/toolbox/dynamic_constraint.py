@@ -45,6 +45,7 @@ class DynamicConstraint(object):
         self._components_iterator = cycle(self.components)
 
     @staticmethod
+    @need_maya_selection
     def create(constraint_type=None):
         '''
         Alternative constructor, creating the node in maya and name it correctly
@@ -149,6 +150,7 @@ def add_and_set_constraint_type_attribute(contraint_shape, constraint_type):
     cmds.setAttr(attribute, constraint_type)
 
 
+@need_maya_selection
 def create_dynamic_constraint_node(constraint_type):
     """
     this method create an nConstraint and apply the custom enum attribute
