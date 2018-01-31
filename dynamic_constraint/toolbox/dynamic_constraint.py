@@ -6,7 +6,11 @@ attribute). It respect production nomenclature and can be used as model for
 gui.
 """
 
+import logging
+import json
+import os
 from itertools import cycle
+
 from maya import cmds, mel
 from maya_libs.selection.decorators import keep_maya_selection, need_maya_selection
 from maya_libs.selection.context_managers import MayaSelectionManager
@@ -14,13 +18,49 @@ from maya_libs.selection.context_managers import MayaSelectionManager
 TYPE_ATTR_NAME = 'constraintType'
 TYPE_ATTR_LONGNAME = 'Dynamic Constraint Type'
 
+PRESETS_FOLDER = 'presets'
 DYNAMIC_CONTRAINT_TYPES = [
-    {'name': 'transform', 'type': 'transform', 'short': 'TRS'},
-    {'name': 'point to surface', 'type': 'pointToPoint',  'short': 'PTP'},
-    {'name': 'slide on surface', 'type': 'pointToSurface', 'short': 'PTS'},
-    {'name': 'exclude collide', 'type': 'collisionExclusion', 'short': 'EXC'},
-    {'name': 'weld', 'type': 'weld', 'short': 'WEL'},
-    {'name': 'undefined', 'type': 'undefined', 'short': 'UND'}]
+    {
+        'name': 'transform',
+        'type': 'transform',
+        'short': 'TRS',
+        'preset_file': 'transform.json'
+    },
+
+    {
+        'name': 'point to surface',
+        'type': 'pointToPoint',
+        'short': 'PTP',
+        'preset_file': 'point_to_surface.json'
+    },
+
+    {
+        'name': 'slide on surface',
+        'type': 'pointToSurface',
+        'short': 'PTS',
+        'preset_file': 'slide_on_surface.json'
+    },
+
+    {
+        'name': 'exclude collide',
+        'type': 'collisionExclusion',
+        'short': 'EXC',
+        'preset_file': 'exclude_collider_pairs.json'
+    },
+
+    {
+        'name': 'weld',
+        'type': 'weld',
+        'short': 'WEL',
+        'preset_file': None
+    },
+
+    {
+        'name': 'undefined',
+        'type': 'undefined',
+        'short': 'UND',
+        'preset_file': None
+    }]
 
 
 class DynamicConstraint(object):
@@ -50,7 +90,7 @@ class DynamicConstraint(object):
         '''
         Alternative constructor, creating the node in maya and name it correctly
         '''
-        onstraint_type = constraint_type or DynamicConstraint.UNDEFINED
+        constraint_type = constraint_type or DynamicConstraint.UNDEFINED
         constraint_node = create_dynamic_constraint_node(constraint_type)
         dynamic_constraint = DynamicConstraint(constraint_node)
         dynamic_constraint.rename_node_from_components()
@@ -125,27 +165,52 @@ class DynamicConstraint(object):
         cmds.rename(parent, nice_name)
         self._node = new_node_name
 
+    def set_color(self, r, g, b):
+        set_dynamic_constraint_color(self._node, r, g ,b)
+
     def set_type(self, constraint_type):
         attribute = self._node + '.' + TYPE_ATTR_NAME
         cmds.setAttr(attribute, constraint_type)
+        apply_presets_on_dynamic_constraint(self._node, constraint_type)
 
     def switch(self):
         return cmds.setAttr(self._node + '.enable', not self.enable)
 
 
-def add_and_set_constraint_type_attribute(contraint_shape, constraint_type):
+def apply_presets_on_dynamic_constraint(constraint_shape, constraint_type):
     """
-    this method add an enum attribut on the constraint shape. Containing the
+    this method opening the json file linked to the constraint type
+    it applying the presets
+    """
+    filename = DYNAMIC_CONTRAINT_TYPES[constraint_type]['preset_file']
+    if filename is None:
+        return logging.info(
+            'No preset file available, applying presets skipped')
+
+    filepath = os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), PRESETS_FOLDER, filename)
+
+    with open(filepath, 'r') as preset_file:
+        attributes = json.load(preset_file)
+
+    for k, v in attributes.iteritems():
+        if v is not None:
+            cmds.setAttr(constraint_shape + '.' + k, v)
+
+
+def add_and_set_constraint_type_attribute(constraint_shape, constraint_type):
+    """
+    this method add an enum attribute on the constraint shape. Containing the
     preset name used during the constraint creation
     """
     cmds.addAttr(
-        contraint_shape, attributeType='enum',
+        constraint_shape, attributeType='enum',
         longName=TYPE_ATTR_NAME,
         niceName=TYPE_ATTR_LONGNAME,
         keyable=True,
         enumName=": ".join([t['name'] for t in DYNAMIC_CONTRAINT_TYPES]))
 
-    attribute = contraint_shape + '.' + TYPE_ATTR_NAME
+    attribute = constraint_shape + '.' + TYPE_ATTR_NAME
     cmds.setAttr(attribute, constraint_type)
 
 
@@ -169,13 +234,13 @@ def create_dynamic_constraint_node(constraint_type):
     return constraint_node[0]
 
 
-def get_dynamic_constraint_color(contraint_shape):
+def get_dynamic_constraint_color(constraint_shape):
     '''
     smart function who return the nconstraint viewport color.
     It working as a normal transform override color except if color is
     undefined, it returns 25, 25, 125 
     '''
-    parent = cmds.listRelatives(contraint_shape, parent=True)[0]
+    parent = cmds.listRelatives(constraint_shape, parent=True)[0]
 
     if not cmds.getAttr(parent + '.overrideEnabled'):
         return 25, 25, 125
@@ -238,6 +303,18 @@ def get_constraint_type(constraint_shape):
 
     attribute = constraint_shape + '.' + TYPE_ATTR_NAME
     return cmds.getAttr(attribute)
+
+
+def set_dynamic_constraint_color(constraint_shape, r=0, g=0, b=0):
+    '''
+    this method is setting the overide color on the constraint parent
+    '''
+    r, g, b = [c / 255 for c in (r, g, b)]
+    parent = cmds.listRelatives(constraint_shape, parent=True)[0]
+
+    cmds.setAttr(parent + '.overrideEnabled', True)
+    cmds.setAttr(parent + '.overrideRGBColors', True)
+    cmds.setAttr(parent + '.overrideColorRGB', r, g, b)
 
 
 def list_dynamic_constraints():
