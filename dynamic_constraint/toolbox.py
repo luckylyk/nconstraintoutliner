@@ -2,7 +2,45 @@
 import os
 import sys
 from PySide2 import QtWidgets, QtCore, QtGui
-from dynamic_constraint import DYNAMIC_CONTRAINT_TYPES
+from .dynamic_constraint import DYNAMIC_CONTRAINT_TYPES, list_dynamic_constraints
+
+
+class DynamicConstraintView(QtWidgets.QWidget):
+
+    def __init__(self, parent=None):
+        super(DynamicConstraintView, self).__init__(parent)
+        self.initUI()
+
+    def initUI(self):
+
+        self._dynamic_constraint_table_view = DynamicConstraintTableView()
+        self._dynamic_constraint_table_model = DynamicConstraintTableModel()
+        self._dynamic_constraint_table_view.set_model(
+            self._dynamic_constraint_table_model)
+        self._dynamic_constraint_item_delegate = DynamicConstraintDelegate(
+            self._dynamic_constraint_table_view)
+        self._dynamic_constraint_table_view.set_item_delegate(
+            self._dynamic_constraint_item_delegate)
+
+        self._create_constraint_button = QtWidgets.QPushButton()
+        self._create_constraint_button.setText('Create dynamic constraint')
+
+        self._refresh = QtWidgets.QPushButton('Refresh')
+        self._refresh.clicked.connect(self.update_dynamic_constraints)
+
+        self._buttons_layout = QtWidgets.QHBoxLayout()
+        self._buttons_layout.addWidget(self._create_constraint_button)
+        self._buttons_layout.addWidget(self._refresh)
+
+        self._layout = QtWidgets.QVBoxLayout(self)
+        self._layout.addWidget(self._dynamic_constraint_table_view)
+        self._layout.addLayout(self._buttons_layout)
+
+        self.update_dynamic_constraints()
+
+    def update_dynamic_constraints(self):
+        self._dynamic_constraint_table_model.set_dynamic_constraints(
+            list_dynamic_constraints())
 
 
 class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
@@ -23,7 +61,7 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
         dynamic_constraint = self.model.data(index, QtCore.Qt.UserRole)
 
         if column == 0:
-            brush = QtGui.QBrush(*dynamic_constraint.color)
+            brush = QtGui.QBrush(QtGui.QColor(*dynamic_constraint.color))
             pen = QtGui.QPen(QtGui.QColor(0, 0, 0))
             painter.setBrush(brush)
             painter.setPen(pen)
@@ -31,6 +69,7 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
                 option.rect.center().x() - 5, option.rect.center().y() - 5,
                 10, 10)
             painter.drawRect(rect)
+            return
 
         if column == 1:
             opt = QtWidgets.QStyleOptionButton()
@@ -54,10 +93,12 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
                 option.rect.left() + 5,
                 (option.rect.height() / 2 + option.rect.top() + 3))
             text = dynamic_constraint.type_name
+            painter.setPen(QtGui.QPalette().color(QtGui.QPalette.WindowText))
             painter.drawText(point, text)
             return
 
         # draw buttons
+        icon = QtGui.QIcon()
         if column == 3:
             icon = self.SELECT_MEMBERS_ICON
         elif column == 4:
@@ -151,7 +192,7 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
         # iconpath = os.path.join(
         #     os.path.dirname(os.path.realpath(__file__)), 'icons')
         # temporary hardoded path for testgithub
-        iconpath = r"D:\EclipseWorkspaces\csse120\myPyRessource\GitHub\my_py_ressources\maya_libs\dynamic_constraint\toolbox\icons"
+        iconpath = r"D:\EclipseWorkspaces\csse120\myPyRessource\GitHub\maya_libs\dynamic_constraint\icons"
 
         if not self.ADD_MEMBERS_ICON:
             self.ADD_MEMBERS_ICON = QtGui.QIcon(

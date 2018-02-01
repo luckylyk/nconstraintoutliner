@@ -150,7 +150,7 @@ class DynamicConstraint(object):
         cmd = (
             'setNComponentMapType("strength",1);'
             'artAttrNComponentToolScript 4 strength;')
-        mel.eval(cmd)
+        mel.evalDeferred(cmd)
 
     @keep_maya_selection
     def remove_selection_to_members(self):
@@ -247,14 +247,14 @@ def get_dynamic_constraint_color(constraint_shape):
 
     if cmds.getAttr(parent + '.overrideRGBColors'):
         return [
-            c * 255 for c in
+            int(c * 255) for c in
             cmds.getAttr(parent + '.overrideColorRGB')[0]]
 
     else:
         color_index = cmds.getAttr(parent + '.overrideColor')
         if color_index > 0:
             return [
-                c * 255 for c in
+                int(c * 255) for c in
                 cmds.colorIndex(color_index, query=True)]
         else:
             return 25, 25, 125
