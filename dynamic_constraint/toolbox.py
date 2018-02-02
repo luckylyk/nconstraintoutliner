@@ -66,8 +66,8 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
             painter.setBrush(brush)
             painter.setPen(pen)
             rect = QtCore.QRect(
-                option.rect.center().x() - 5, option.rect.center().y() - 5,
-                10, 10)
+                option.rect.center().x() - 7, option.rect.center().y() - 7,
+                14, 14)
             painter.drawRect(rect)
             return
 
@@ -151,6 +151,8 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
 
         elif column == 6:
             editor = QtWidgets.QPushButton(self.PAINT_ICON, '', parent)
+            editor.clicked.connect(
+                dynamic_constraint.paint_constraint_strength_map_on_components)
             return editor
 
         elif column == 7:

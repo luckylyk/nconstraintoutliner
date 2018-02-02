@@ -148,9 +148,13 @@ class DynamicConstraint(object):
         component = self._components_iterator.next()
         cmds.select([self._node, component])
         cmd = (
-            'setNComponentMapType("strength",1);'
+            'setNComponentMapType("strength", 1);'
             'artAttrNComponentToolScript 4 strength;')
-        mel.evalDeferred(cmd)
+        mel.eval(cmd)
+
+    def select_members(self):
+        cmds.select(self._node)
+        mel.eval('dynamicConstraintMembership "select";')
 
     @keep_maya_selection
     def remove_selection_to_members(self):
