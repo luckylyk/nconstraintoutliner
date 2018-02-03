@@ -12,8 +12,9 @@ import os
 from itertools import cycle
 
 from maya import cmds, mel
-from maya_libs.selection.decorators import keep_maya_selection, need_maya_selection
 from maya_libs.selection.context_managers import MayaSelectionManager
+from maya_libs.selection.decorators import (
+    keep_maya_selection, need_maya_selection)
 
 TYPE_ATTR_NAME = 'constraintType'
 TYPE_ATTR_LONGNAME = 'Dynamic Constraint Type'
@@ -41,14 +42,14 @@ DYNAMIC_CONTRAINT_TYPES = [
     {
         'name': 'point to surface',
         'type': 'pointToSurface',
-        'short': 'PTP',
+        'short': 'PTS',
         'preset_file': 'point_to_surface.json'
     },
 
     {
         'name': 'slide on surface',
         'type': 'slideOnSurface',
-        'short': 'PTS',
+        'short': 'SOS',
         'preset_file': 'slide_on_surface.json'
     },
 
@@ -148,6 +149,7 @@ class DynamicConstraint(object):
         return DYNAMIC_CONTRAINT_TYPES[self.type]['name']
 
     @keep_maya_selection
+    @need_maya_selection
     def add_selection_to_members(self):
         cmds.select([self._node] + cmds.ls(sl=True))
         mel.eval('dynamicConstraintMembership "add";')
@@ -320,7 +322,7 @@ def set_dynamic_constraint_color(constraint_shape, r=0, g=0, b=0):
     '''
     this method is setting the overide color on the constraint parent
     '''
-    r, g, b = [c / 255 for c in (r, g, b)]
+    r, g, b = [c / 255.0 for c in (r, g, b)]
     parent = cmds.listRelatives(constraint_shape, parent=True)[0]
 
     cmds.setAttr(parent + '.overrideEnabled', True)
@@ -328,6 +330,30 @@ def set_dynamic_constraint_color(constraint_shape, r=0, g=0, b=0):
     cmds.setAttr(parent + '.overrideColorRGB', r, g, b)
 
 
-def list_dynamic_constraints():
+def list_dynamic_constraints(types=None, components=None):
+    '''
+    this method list the dynamic constraint in the current maya scene.
+    if types or components is specified, it will filter dynamic constraints
+    :types: if the dynmic contraint 
+    '''
     nodes = cmds.ls(type='dynamicConstraint')
-    return [DynamicConstraint(node) for node in nodes]
+    dynamic_constraints = [DynamicConstraint(node) for node in nodes]
+
+    if types is not None:
+        dynamic_constraints = [
+            dc for dc in dynamic_constraints if dc.type in types]
+
+    if components is not None:
+        dynamic_constraints = [
+            dc for dc in dynamic_constraints
+            if any([c in components for c in dc.components])]
+
+    return dynamic_constraints
+
+
+def list_dynamic_constraints_components():
+    '''
+    this is returning all components nodes linked to a dynamic constraint
+    '''
+    dynamic_constraints = list_dynamic_constraints()
+    return list(set([c for dc in dynamic_constraints for c in dc.components]))
