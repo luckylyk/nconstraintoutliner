@@ -1,4 +1,4 @@
-import shiboken
+import shiboken2
 from PySide2 import QtWidgets
 import maya.OpenMayaUI as omui
 
@@ -10,4 +10,4 @@ def get_maya_windows():
     """
     main_window = omui.MQtUtil.mainWindow()
     if main_window is not None:
-        return shiboken.wrapInstance(main_window, QtWidgets.QWidget)
+        return shiboken2.wrapInstance(long(main_window), QtWidgets.QWidget)
