@@ -2,13 +2,15 @@
 import os
 import sys
 from PySide2 import QtWidgets, QtCore, QtGui
-from .dynamic_constraint import DYNAMIC_CONTRAINT_TYPES, list_dynamic_constraints
+from .dynamic_constraint import (
+    DYNAMIC_CONTRAINT_TYPES, list_dynamic_constraints,
+    DynamicConstraint)
 
 
 class DynamicConstraintView(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
-        super(DynamicConstraintView, self).__init__(parent)
+        super(DynamicConstraintView, self).__init__(parent, QtCore.Qt.Window)
         self.initUI()
 
     def initUI(self):
@@ -22,8 +24,12 @@ class DynamicConstraintView(QtWidgets.QWidget):
         self._dynamic_constraint_table_view.set_item_delegate(
             self._dynamic_constraint_item_delegate)
 
+        self._create_constraint_menu = CreateDynamicConstraintMenu()
         self._create_constraint_button = QtWidgets.QPushButton()
+        self._create_constraint_button.released.connect(
+            self._create_constraint_button.showMenu)
         self._create_constraint_button.setText('Create dynamic constraint')
+        self._create_constraint_button.setMenu(self._create_constraint_menu)
 
         self._refresh = QtWidgets.QPushButton('Refresh')
         self._refresh.clicked.connect(self.update_dynamic_constraints)
@@ -41,6 +47,27 @@ class DynamicConstraintView(QtWidgets.QWidget):
     def update_dynamic_constraints(self):
         self._dynamic_constraint_table_model.set_dynamic_constraints(
             list_dynamic_constraints())
+
+
+class CreateDynamicConstraintAction(QtWidgets.QAction):
+    def __init__(self, name, parent=None):
+        super(CreateDynamicConstraintAction, self).__init__(name, parent)
+        self.dynamic_constraint_type = None
+        self.triggered.connect(self._create_dynamic_constraint)
+
+    def _create_dynamic_constraint(self):
+        if self.dynamic_constraint_type is None:
+            return
+        DynamicConstraint.create(self.dynamic_constraint_type)
+
+class CreateDynamicConstraintMenu(QtWidgets.QMenu):
+    def __init__(self, parent=None):
+        super(CreateDynamicConstraintMenu, self).__init__(parent=parent)
+
+        for i, dc_type in enumerate(DYNAMIC_CONTRAINT_TYPES):
+            action = CreateDynamicConstraintAction(dc_type['name'], self)
+            action.dynamic_constraint_type = i
+            self.addAction(action)
 
 
 class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):

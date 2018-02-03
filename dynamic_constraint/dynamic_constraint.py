@@ -21,24 +21,42 @@ TYPE_ATTR_LONGNAME = 'Dynamic Constraint Type'
 PRESETS_FOLDER = 'presets'
 DYNAMIC_CONTRAINT_TYPES = [
     {
+        'name': 'undefined',
+        'type': 'undefined',
+        'short': 'UND',
+        'preset_file': None
+    },
+    {
         'name': 'transform',
         'type': 'transform',
         'short': 'TRS',
         'preset_file': 'transform.json'
     },
-
+    {
+        'name': 'component to component',
+        'type': 'pointToPoint',
+        'short': 'CTC',
+        'preset_file': 'component_to_component.json'
+    },
     {
         'name': 'point to surface',
-        'type': 'pointToPoint',
+        'type': 'pointToSurface',
         'short': 'PTP',
         'preset_file': 'point_to_surface.json'
     },
 
     {
         'name': 'slide on surface',
-        'type': 'pointToSurface',
+        'type': 'slideOnSurface',
         'short': 'PTS',
         'preset_file': 'slide_on_surface.json'
+    },
+
+    {
+        'name': 'weld',
+        'type': 'weldBorders',
+        'short': 'WLD',
+        'preset_file': 'weld_adjacent_border.json'
     },
 
     {
@@ -49,18 +67,12 @@ DYNAMIC_CONTRAINT_TYPES = [
     },
 
     {
-        'name': 'weld',
-        'type': 'weld',
-        'short': 'WEL',
-        'preset_file': None
+        'name': 'disable collision',
+        'type': 'disableCollision',
+        'short': 'DIS',
+        'preset_file': 'disable_collision.json'
     },
-
-    {
-        'name': 'undefined',
-        'type': 'undefined',
-        'short': 'UND',
-        'preset_file': None
-    }]
+]
 
 
 class DynamicConstraint(object):
@@ -73,12 +85,14 @@ class DynamicConstraint(object):
     or instancied creating a new constraint node in maya:
     dynamic_constraint = DynamicConstraint.create(DynamicConstraint.TRANSFORM)
     """
-    TRANSFORM = 0
-    POINT_TO_SURFACE = 1
-    SLIDE_ON_SURFACE = 2
-    EXCLUDE_COLLIDE = 3
-    WELD = 4
-    UNDEFINED = 5
+    UNDEFINED = 0
+    TRANSFORM = 1
+    COMPONENT_TO_COMPONENT = 2
+    POINT_TO_SURFACE = 3
+    SLIDE_ON_SURFACE = 4
+    WELD = 5
+    EXCLUDE_COLLIDE = 6
+    DISABLE_COLLIDE = 7
 
     def __init__(self, nodename=None):
         self._node = nodename
@@ -108,11 +122,6 @@ class DynamicConstraint(object):
     @property
     def enable(self):
         return cmds.getAttr(self._node + '.enable')
-
-    @property
-    def is_named_correctly(self):
-        transform = cmds.listRelatives(self._node, parent=True)[0]
-        return transform == self.nice_name
 
     @property
     def is_well_named(self):
@@ -229,9 +238,9 @@ def create_dynamic_constraint_node(constraint_type):
         DynamicConstraint.SLIDE_ON_SURFACE, DynamicConstraint.EXCLUDE_COLLIDE,
         DynamicConstraint.WELD, DynamicConstraint.UNDEFINED
     """
-    constraint_name = DYNAMIC_CONTRAINT_TYPES[constraint_type]['name']
+    constraint_type_name = DYNAMIC_CONTRAINT_TYPES[constraint_type]['type']
     constraint_node = mel.eval(
-        'createNConstraint {} 0;'.format(constraint_name))
+        'createNConstraint {} 0;'.format(constraint_type_name))
     if not constraint_node:
         return
     add_and_set_constraint_type_attribute(constraint_node[0], constraint_type)
@@ -254,14 +263,13 @@ def get_dynamic_constraint_color(constraint_shape):
             int(c * 255) for c in
             cmds.getAttr(parent + '.overrideColorRGB')[0]]
 
+    color_index = cmds.getAttr(parent + '.overrideColor')
+    if color_index > 0:
+        return [
+            int(c * 255) for c in
+            cmds.colorIndex(color_index, query=True)]
     else:
-        color_index = cmds.getAttr(parent + '.overrideColor')
-        if color_index > 0:
-            return [
-                int(c * 255) for c in
-                cmds.colorIndex(color_index, query=True)]
-        else:
-            return 25, 25, 125
+        return 25, 25, 125
 
 
 @keep_maya_selection
@@ -285,7 +293,7 @@ def get_dynamic_constraint_nice_name(constraint_shape):
     type_name = DYNAMIC_CONTRAINT_TYPES[constraint_type]['short']
     components = get_dynamic_constraint_components(constraint_shape)
     if len(components) > 1:
-        name = type_name + '_' + 'To'.join(components)
+        name = type_name + '_' + '_to_'.join(components)
     elif len(components) == 1:
         name = components[0]
     else:
@@ -300,8 +308,7 @@ def get_constraint_type(constraint_shape):
     of the type selected in the enum attribut set on the node
     '''
     if not cmds.attributeQuery(
-            TYPE_ATTR_NAME,
-            node=constraint_shape, exists=True):
+            TYPE_ATTR_NAME, node=constraint_shape, exists=True):
         add_and_set_constraint_type_attribute(
             constraint_shape, DynamicConstraint.UNDEFINED)
 

@@ -22,7 +22,7 @@
  "strengthDropoff.strengthDropoff_Interp": null, 
  "connectionDensityRange.connectionDensityRange_Position": null, 
  "bendBreakAngle": 360.0, 
- "connectionMethod": 2, 
+ "connectionMethod": 1, 
  "identification": 0, 
  "connectionDensity": 1.0, 
  "publishedNodeInfo.isHierarchicalNode": null, 
@@ -45,7 +45,7 @@
  "rmbCommand": null, 
  "connectionDensityRange": null, 
  "restLengthScale": 1.0, 
- "maxDistance": 0.1, 
+ "maxDistance": 0.05, 
  "boundingBoxCenterZ": 0.0, 
  "evalCurrent": null, 
  "componentRelation": 1, 
@@ -57,6 +57,6 @@
  "connectionUpdate": 0, 
  "ghostRangeStart": 0.0, 
  "borderConnections": null, 
- "constraintMethod": 1, 
+ "constraintMethod": 0, 
  "damp": 0.0
 }
