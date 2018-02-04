@@ -168,6 +168,7 @@ class DynamicConstraint(object):
         mel.eval('dynamicConstraintMembership "select";')
 
     @keep_maya_selection
+    @need_maya_selection
     def remove_selection_to_members(self):
         cmds.select([self._node] + cmds.ls(sl=True))
         mel.eval('dynamicConstraintMembership "remove";')
@@ -180,16 +181,34 @@ class DynamicConstraint(object):
         cmds.rename(parent, nice_name)
         self._node = new_node_name
 
+    def select(self, add=True):
+        cmds.select(self._node)
+
     def set_color(self, r, g, b):
         set_dynamic_constraint_color(self._node, r, g ,b)
 
+    def set_color_from_dialogbox(self):
+        cmds.colorEditor(rgb=[c / 255.0 for c in self.color])
+        if not cmds.colorEditor(query=True, result=True):
+            return
+        r, g, b = [
+            int(c * 255) for c in cmds.colorEditor(query=True, rgb=True)]
+        self.set_color(r, g, b)
+
     def set_type(self, constraint_type):
         attribute = self._node + '.' + TYPE_ATTR_NAME
+        old_type = self.type
         cmds.setAttr(attribute, constraint_type)
+
+        # if the constraint if undefined, it's not changing the preset
+        # to avoid a change from a tweaked constraint done with the maya tools
+        if old_type == DynamicConstraint.UNDEFINED:
+            return
         apply_presets_on_dynamic_constraint(self._node, constraint_type)
 
     def switch(self):
-        return cmds.setAttr(self._node + '.enable', not self.enable)
+        cmds.setAttr(self._node + '.enable', not self.enable)
+        return self.enable
 
 
 def apply_presets_on_dynamic_constraint(constraint_shape, constraint_type):
