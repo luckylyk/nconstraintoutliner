@@ -97,7 +97,11 @@ class DynamicConstraint(object):
 
     def __init__(self, nodename=None):
         self._node = nodename
-        self._components_iterator = cycle(self.components)
+        self._components = None
+        self._components_iterator = None
+        self._members = None
+        self._type = None
+        self._nice_name = None
 
     @staticmethod
     @need_maya_selection
@@ -116,9 +120,18 @@ class DynamicConstraint(object):
         return get_dynamic_constraint_color(self._node)
 
     @property
+    def components_iterator(self):
+        if self._components_iterator is None:
+            self._components_iterator = cycle(self.components)
+        return self._components_iterator
+
+    @property
     def components(self):
         ''' return objects members parent's '''
-        return get_dynamic_constraint_components(self._node)
+        if self._components is None:
+            self._components = get_dynamic_constraint_components(self._node)
+            self._components_iterator = None
+        return self._components
 
     @property
     def enable(self):
@@ -130,7 +143,9 @@ class DynamicConstraint(object):
 
     @property
     def nice_name(self):
-        return get_dynamic_constraint_nice_name(self._node)
+        if self._nice_name is None:
+            self._nice_name = get_dynamic_constraint_nice_name(self._node)
+        return self._nice_name
 
     @property
     def node(self):
@@ -142,7 +157,9 @@ class DynamicConstraint(object):
 
     @property
     def type(self):
-        return get_constraint_type(self._node)
+        if self._type is None:
+            self._type = get_constraint_type(self._node)
+        return self._type
 
     @property
     def type_name(self):
@@ -153,10 +170,11 @@ class DynamicConstraint(object):
     def add_selection_to_members(self):
         cmds.select([self._node] + cmds.ls(sl=True))
         mel.eval('dynamicConstraintMembership "add";')
-        self._components_iterator = cycle(self.components)
+        self._components = None
+        self._components_iterator = None
 
     def paint_constraint_strength_map_on_components(self):
-        component = self._components_iterator.next()
+        component = self.components_iterator.next()
         cmds.select([self._node, component])
         cmd = (
             'setNComponentMapType("strength", 1);'
@@ -172,7 +190,8 @@ class DynamicConstraint(object):
     def remove_selection_to_members(self):
         cmds.select([self._node] + cmds.ls(sl=True))
         mel.eval('dynamicConstraintMembership "remove";')
-        self._components_iterator = cycle(self.components)
+        self._components = None
+        self._components_iterator = None
 
     def rename_node_from_components(self):
         parent = self.parent
@@ -180,6 +199,7 @@ class DynamicConstraint(object):
         new_node_name = cmds.rename(self._node, nice_name + 'Shape')
         cmds.rename(parent, nice_name)
         self._node = new_node_name
+        self._nice_name = None
 
     def select(self, add=True):
         cmds.select(self._node)
@@ -199,7 +219,7 @@ class DynamicConstraint(object):
         attribute = self._node + '.' + TYPE_ATTR_NAME
         old_type = self.type
         cmds.setAttr(attribute, constraint_type)
-
+        self._type = constraint_type
         # if the constraint if undefined, it's not changing the preset
         # to avoid a change from a tweaked constraint done with the maya tools
         if old_type == DynamicConstraint.UNDEFINED:
@@ -299,7 +319,10 @@ def get_dynamic_constraint_components(constraint_shape):
     return the nconstraint components list as list of strings.
     '''
     cmds.select(constraint_shape)
-    mel.eval('dynamicConstraintMembership "select";')
+    try:  # this maya command can crash if it can't find any component
+        mel.eval('dynamicConstraintMembership "select";')
+    except:
+        return []
     components = cmds.ls(selection=True, objectsOnly=True)
     components = [n for c in components for n in cmds.listRelatives(c, p=True)]
     return components
