@@ -1,24 +1,18 @@
 '''
 This Module contain a collection of decorator to manage maya selection.
 The goal is to externalize all selection checks during procedure like:
-
 def generic_method_creating_a_deformer_from_selection():
     selection = cmds.ls(selection=True)
     if len(selection) == 0:
         return cmds.warning('Please select at least one node')
-
     if cmds.nodeType(selection[0]) != 'mesh':
         return cmds.warning('Please select a mesh first')
-
     # all your process ...
     # and finally reselect to get back your selection
-
     cmds.select(selection)
     return
-
 These kind of lines pollute all procedures changing, checking selection
 and it can be cleaner to externalize them like this:
-
 @keep_maya_selection
 @filter_node_type_in_selection(node_type=('transform, mesh'))
 @selection_contains_at_least(2, 'transform')
@@ -26,13 +20,15 @@ and it can be cleaner to externalize them like this:
 def generic_method_creating_a_deformer_from_selection():
     # all your process ...
     return
-
 careful, the used order is really important. A bad wrapper managment can
 create issue.
 '''
 
 from functools import wraps
 from maya import cmds
+
+
+__author__ = "lionelb"
 
 
 def keep_maya_selection(func):
@@ -63,20 +59,56 @@ def need_maya_selection(func):
     return wrapper
 
 
-def filter_node_type_in_selection(**ls_kwargs):
+def filter_selection(**ls_kwargs):
     '''
     this decorator filter the current selection and keep only the node_types
-    the **ls_kwargs let you use all argument of the cmds.ls command
+    in the node_type list
     @node_type string or tuple of string
     '''
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            original_selection = cmds.ls(selection=True)
-            if ls_kwargs:
-                cmds.select(cmds.ls(selection=True, **ls_kwargs))
+            cmds.select(cmds.ls(selection=True, **ls_kwargs))
             result = func(*args, **kwargs)
             return result
+        return wrapper
+    return decorator
+
+
+def select_shape_transforms(func):
+    '''
+    this decorator select all transforms instead of shapes
+    '''
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        nodes = [
+            n if cmds.nodeType(n) == 'transform'
+            else cmds.listRelatives(n, parent=True)[0]
+            for n in cmds.ls(sl=True)]
+        cmds.select(nodes)
+        result = func(*args, **kwargs)
+        return result
+    return wrapper
+
+
+def reorder_selection_by_nodetype(*nodetypes):
+    '''
+    This decorator reorder your selection by maya node type.
+    It use full for deformer using a mesh and lot of curve.
+    You want to be sure the first one in selection is the mesh, you can do
+    @reorder_selection_by_nodetype('mesh', 'nurbsCurve')
+    type not declared will stay unsorted and putted at the end of the list.
+    '''
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            selection = cmds.ls(selection=True)
+            new_selection = []
+            for nodetype in nodetypes:
+                new_selection += cmds.ls(selection, type=nodetype)
+            new_selection += [n for n in selection if n not in new_selection]
+            cmds.select(new_selection)
+            return func(*args, **kwargs)
         return wrapper
     return decorator
 
