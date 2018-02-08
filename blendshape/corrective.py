@@ -3,7 +3,7 @@ import maya.OpenMaya as om
 
 from maya_libs.selection.decorators import (
     need_maya_selection, filter_selection, selection_contains_at_least,
-    select_shape_parents)
+    select_shape_transforms)
 
 
 CORRECTIVE_BLENDSHAPE_NAME = 'corrective_blendshape'
@@ -19,7 +19,7 @@ DISPLAY_MESH_SG = 'TMP_DISPLAY_COPY_LAMBERTSG'
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
-@select_shape_parents
+@select_shape_transforms
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_working_copy_on_selection():
@@ -94,7 +94,7 @@ def create_working_copy(mesh):
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
-@select_shape_parents
+@select_shape_transforms
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def delete_selected_working_copys():
@@ -159,7 +159,7 @@ def get_corrective_blendshapes(mesh):
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
-@select_shape_parents
+@select_shape_transforms
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_blendshape_corrective_for_selected_working_copys():
@@ -221,7 +221,7 @@ def add_target_on_corrective_blendshape(blendshape, target, base):
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
-@select_shape_parents
+@select_shape_transforms
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def apply_selected_working_copys():

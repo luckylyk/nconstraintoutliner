@@ -1,4 +1,6 @@
 
+import os
+from functools import partial
 from PySide2 import QtWidgets, QtGui, QtCore
 from .corrective import (
     create_working_copy_on_selection, delete_selected_working_copys,
@@ -6,17 +8,27 @@ from .corrective import (
     create_blendshape_corrective_for_selected_working_copys)
 
 from maya_libs.qt.main_window import get_maya_windows
-def undochunk(fun):
-    pass
 
 WINDOWTITLE = "Corrective Blendshape"
+ICONPATH = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), 'icons')
+
+KEY_TEMPLATES = [
+    [None, None, None, None, 0.0, 1.0, 0.0, None, None, None, None],
+    [None, None, None, 0.0, 1.0, None, 1.0, 0.0, None, None, None],
+    [None, None, None, None, None, 1.0, None, None, None, None, None],
+    [None, None, None, None, None, 0.0, None, None, None, None, None],
+    [None, None, None, None, 0.0, 1.0, None, None, None, None, None],
+    [None, None, None, None, 1.0, 0.0, None, None, None, None, None],
+    [0.0, None, 0.15, 0.8, None, 1.0, None, 0.8, 0.15, None, 0.0],
+    [None, None, None, None, None, None, None, None, None, None, None]]
 
 class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super(CorrectiveBlendshapeWindow, self).__init__(
             parent, QtCore.Qt.Tool)
 
-        self.setFixedSize(QtCore.QSize(222, 234))
+        # self.setFixedSize(QtCore.QSize(222, 234))
         self.setWindowTitle(WINDOWTITLE)
 
         self._create_working_copy_button = QtWidgets.QPushButton(
@@ -40,6 +52,8 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
         self._display_slider.setValue(0)
         self._display_slider.valueChanged.connect(self._call_slider_changed)
 
+        self._template_key_view = TemplateSelecterView(self)
+
         font = QtGui.QFont()
         font.setBold(True)
         font.setPixelSize(16)
@@ -51,16 +65,36 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
         self._apply_on_new_blendshape_button.released.connect(
             self._call_apply_on_new_blendshape)
 
+        self._template_buttons = []
+        for index in range(1, 9):
+            button = QtWidgets.QPushButton()
+            button.setIcon(
+                QtGui.QIcon(
+                    os.path.join(ICONPATH, 'template_0{}.png'.format(index))))
+            button.setIconSize(QtCore.QSize(35, 24))
+            button.setFixedSize(QtCore.QSize(47, 35))
+            button.clicked.connect(
+                partial(self._call_set_template_values, index -1))
+            self._template_buttons.append(button)
+
+        self._grid_layout = QtWidgets.QGridLayout()
+        row, col = 0, 0
+        for button in self._template_buttons:
+            self._grid_layout.addWidget(button, row, col)
+            col += 1
+            if col > 3:
+                col = 0
+                row += 1
+
         self._layout = QtWidgets.QVBoxLayout(self)
         self._layout.setSpacing(4)
         self._layout.addLayout(self._create_delete_layout)
         self._layout.addWidget(self._display_slider)
-        self._layout.addWidget(TemplateSelecterView(self))
+        self._layout.addWidget(self._template_key_view)
+        self._layout.addLayout(self._grid_layout)
         self._layout.addSpacing(4)
         self._layout.addWidget(self._apply_button)
         self._layout.addWidget(self._apply_on_new_blendshape_button)
-
-        self._template_selecter = TemplateSelecterView()
 
     #@undochunk
     def _call_create_working_copy(self):
@@ -80,6 +114,9 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
     #@undochunk
     def _call_apply_on_new_blendshape(self):
         create_blendshape_corrective_for_selected_working_copys()
+
+    def _call_set_template_values(self, value):
+        self._template_key_view.set_values(KEY_TEMPLATES[value])
 
 
 class TemplateSelecterView(QtWidgets.QWidget):
@@ -117,9 +154,10 @@ class TemplateSelecterView(QtWidgets.QWidget):
         return values
 
     def set_values(self, values):
-        assert len(values) == 10
+        assert len(values) == 11
         assert [v <= 1 or v >= 0 for v in values]
         self._values = values
+        self.repaint()
 
     def mousePressEvent(self, event):
         self._mouse_clicked = True
@@ -176,15 +214,15 @@ class TemplateSelecterView(QtWidgets.QWidget):
 
         self._draw_grid(painter, rect)
 
-        pen = QtGui.QPen(QtGui.QColor('red'))
-        painter.setPen(pen)
-        for point in self._get_points():
-            painter.drawEllipse(point, 2, 2)
-
         pen = QtGui.QPen(QtGui.QColor('orange'))
         painter.setPen(pen)
         for line in self._get_lines():
             painter.drawLine(line)
+
+        pen = QtGui.QPen(QtGui.QColor('red'))
+        painter.setPen(pen)
+        for point in self._get_points():
+            painter.drawEllipse(point, 2, 2)
 
     def _draw_grid(self, painter, rect):
         pen = QtGui.QPen(QtGui.QColor('#111111'))
@@ -232,7 +270,7 @@ class TemplateSelecterView(QtWidgets.QWidget):
         points = self._get_points()
         lines = []
         values = self.values()
-        if not any([f for f in values if f is not None]):
+        if not any([1 for f in values if f is not None]):
             return lines
 
         if values[0] is None:
