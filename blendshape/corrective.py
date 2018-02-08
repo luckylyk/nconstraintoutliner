@@ -1,8 +1,9 @@
 import pymel.core as pm
+import maya.OpenMaya as om
 
 from maya_libs.selection.decorators import (
-    need_maya_selection, filter_node_type_in_selection,
-    selection_contains_at_least)
+    need_maya_selection, filter_selection, selection_contains_at_least,
+    select_shape_parents)
 
 
 CORRECTIVE_BLENDSHAPE_NAME = 'corrective_blendshape'
@@ -17,7 +18,8 @@ DISPLAY_MESH_SHADER = 'TMP_DISPLAY_COPY_LAMBERT'
 DISPLAY_MESH_SG = 'TMP_DISPLAY_COPY_LAMBERTSG'
 
 
-@filter_node_type_in_selection(type='transform', objectsOnly=True)
+@filter_selection(type=('mesh', 'transform'), objectsOnly=True)
+@select_shape_parents
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_working_copy_on_selection():
@@ -91,7 +93,8 @@ def create_working_copy(mesh):
     pm.select(working_copy)
 
 
-@filter_node_type_in_selection(type='transform', objectsOnly=True)
+@filter_selection(type=('mesh', 'transform'), objectsOnly=True)
+@select_shape_parents
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def delete_selected_working_copys():
@@ -155,7 +158,8 @@ def get_corrective_blendshapes(mesh):
         node.hasAttr(CORRECTIVE_BLENDSHAPE_ATTR)]
 
 
-@filter_node_type_in_selection(type='transform', objectsOnly=True)
+@filter_selection(type=('mesh', 'transform'), objectsOnly=True)
+@select_shape_parents
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_blendshape_corrective_for_selected_working_copys():
@@ -216,7 +220,8 @@ def add_target_on_corrective_blendshape(blendshape, target, base):
     blendshape.envelope.set(value)
 
 
-@filter_node_type_in_selection(type='transform', objectsOnly=True)
+@filter_selection(type=('mesh', 'transform'), objectsOnly=True)
+@select_shape_parents
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def apply_selected_working_copys():
@@ -251,3 +256,53 @@ def apply_working_copy(mesh, blendshape=None):
                 blendshapes[0], working_mesh, original_mesh)
 
     delete_working_copy_on_mesh(original_mesh)
+
+
+def create_clean_target(blendshape, target, base):
+    """
+    WIP METHOD TO AVOID DOUBLE TRANSFORM
+    """
+
+    intermediate_mesh = pm.createNode("mesh")
+    in_connection = blendshape.attr('input[0].inputGeometry').listConnections(
+        source=True, destination=False, plugs=True)[0]
+    in_connection >> intermediate_mesh.inMesh
+    pm.getAttr(intermediate_mesh.outMesh, type=True)
+    in_connection // intermediate_mesh.inMesh
+
+    selection_list = om.MSelectionList()
+    selection_list.add(target)
+    selection_list.add(base)
+    selection_list.add(intermediate_mesh.name())
+
+    target_object = om.MObject()
+    base_object = om.MObject()
+    intermediate_object = om.MObject()
+
+    selection_list.getDependNode(0, target_object)
+    selection_list.getDependNode(1, base_object)
+    selection_list.getDependNode(2, intermediate_object)
+    selection_list.clear()
+
+    target_fn_esh = om.MFnMesh(target_object)
+    deform_fn_mesh = om.MFnMesh(base_object)
+    intermediate_fn_mesh = om.MFnMesh(intermediate_object)
+
+    target_points = om.MPointArray()
+    base_points = om.MPointArray()
+    intermediate_points = om.MPointArray()
+
+    target_fn_esh.getPoints(target_points)
+    deform_fn_mesh.getPoints(base_points)
+    intermediate_fn_mesh.getPoints(intermediate_points)
+
+    i = 0
+    while (i < target_points.length()):
+        intermediate_points.set(
+            intermediate_points[i] + (target_points[i] - base_points[i]), i)
+        i += 1
+
+    target_fn_esh.setPoints(intermediate_points)
+    target_fn_esh.updateSurface()
+
+    pm.delete(intermediate_mesh.listRelatives(parent=True))
