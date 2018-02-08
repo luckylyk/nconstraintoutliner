@@ -63,18 +63,18 @@ def need_maya_selection(func):
     return wrapper
 
 
-def filter_node_type_in_selection(node_type=None):
+def filter_node_type_in_selection(**ls_kwargs):
     '''
     this decorator filter the current selection and keep only the node_types
-    in the node_type list
+    the **ls_kwargs let you use all argument of the cmds.ls command
     @node_type string or tuple of string
     '''
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             original_selection = cmds.ls(selection=True)
-            if node_type:
-                cmds.select(cmds.ls(selection=True, type=node_type))
+            if ls_kwargs:
+                cmds.select(cmds.ls(selection=True, **ls_kwargs))
             result = func(*args, **kwargs)
             return result
         return wrapper

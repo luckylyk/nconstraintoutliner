@@ -17,7 +17,7 @@ DISPLAY_MESH_SHADER = 'TMP_DISPLAY_COPY_LAMBERT'
 DISPLAY_MESH_SG = 'TMP_DISPLAY_COPY_LAMBERTSG'
 
 
-@filter_node_type_in_selection('transform')
+@filter_node_type_in_selection(type='transform', objectsOnly=True)
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_working_copy_on_selection():
@@ -43,6 +43,7 @@ def create_working_copy(mesh):
     original_mesh = pm.PyNode(mesh)
     working_copy = original_mesh.duplicate()[0]
     display_copy = original_mesh.duplicate()[0]
+
     # clean intermediate duplicated shapes
     for shape in working_copy.getShapes() + display_copy.getShapes():
         if shape.intermediateObject.get() is True:
@@ -50,6 +51,9 @@ def create_working_copy(mesh):
 
     original_mesh.lodVisibility.set(False)
     working_copy.rename(working_copy.name() + '_f' + str(pm.env.time))
+    for shape in display_copy.getShapes():
+        shape.overrideEnabled.set(True)
+        shape.overrideDisplayType.set(2)
 
     # create and link attibutes to connect working meshes to original mesh.
     pm.addAttr(
@@ -87,7 +91,7 @@ def create_working_copy(mesh):
     pm.select(working_copy)
 
 
-@filter_node_type_in_selection('transform')
+@filter_node_type_in_selection(type='transform', objectsOnly=True)
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def delete_selected_working_copys():
@@ -151,7 +155,7 @@ def get_corrective_blendshapes(mesh):
         node.hasAttr(CORRECTIVE_BLENDSHAPE_ATTR)]
 
 
-@filter_node_type_in_selection('transform')
+@filter_node_type_in_selection(type='transform', objectsOnly=True)
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_blendshape_corrective_for_selected_working_copys():
@@ -169,10 +173,10 @@ def create_blendshape_corrective_on_mesh(base, target):
     """
     base = pm.PyNode(base)
     target = pm.PyNode(target)
+    name = base.name() + '_' + CORRECTIVE_BLENDSHAPE_NAME
 
     corrective_blendshape = pm.blendShape(
-        target, base, name=CORRECTIVE_BLENDSHAPE_NAME,
-        before=True, weight=(0, 1))[0]
+        target, base, name=name, before=True, weight=(0, 1))[0]
 
     pm.addAttr(
         corrective_blendshape, attributeType='bool',
@@ -204,12 +208,15 @@ def add_target_on_corrective_blendshape(blendshape, target, base):
         corrective_blendshape.inputTarget[0].inputTargetGroup.get(
             multiIndices=True)[-1] + 1)
 
+    value = blendshape.envelope.get()
+    blendshape.envelope.set(0)
     pm.blendShape(
         blendshape, edit=True, before=True, target=(base, index, target, 1.0))
     pm.blendShape(blendshape, edit=True, weight=(index, 1.0))
+    blendshape.envelope.set(value)
 
 
-@filter_node_type_in_selection('transform')
+@filter_node_type_in_selection(type='transform', objectsOnly=True)
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def apply_selected_working_copys():
