@@ -135,9 +135,9 @@ def set_working_copys_transparency(value):
     compare working mesh and original mesh
     """
     if not pm.objExists(WORKING_MESH_SHADER):
-        pm.warning('working mesh shader not found')
+        return pm.warning('working mesh shader not found')
     if not pm.objExists(DISPLAY_MESH_SHADER):
-        pm.warning('working mesh shader not found')
+        return pm.warning('working mesh shader not found')
 
     working_copy_shader = pm.PyNode(WORKING_MESH_SHADER)
     display_copy_shader = pm.PyNode(DISPLAY_MESH_SHADER)
