@@ -306,3 +306,23 @@ def create_clean_target(blendshape, target, base):
     target_fn_esh.updateSurface()
 
     pm.delete(intermediate_mesh.listRelatives(parent=True))
+
+
+def set_animation_template_on_blendshape_target_weight(
+        blendshape, target_index, values=None):
+    """
+    this method will apply an animation on the blendshape target index given.
+    the value is an float array. It represent a value at frame.
+    the array middle value is the value set at the current frame.
+    """
+    if values is None or not any([1 for v in values if v is not None]):
+        return
+
+    blendshape = pm.PyNode(blendshape)
+    frames = range(int(pm.env.time - 5), int(pm.env.time + 6))
+    frames_values = {
+        f: values[i] for i, f in enumerate(frames) if values[i] is not None}
+
+    for frame, value in frames_values.iteritems():
+        pm.setKeyframe(
+            blendshape.weight[target_index], time=frame, value=value)
