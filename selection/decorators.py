@@ -159,3 +159,23 @@ def selection_contains_exactly(number, node_type):
             return func(*args, **kwargs)
         return wrapper
     return decorator
+
+
+def filter_transforms_with_children_types(*nodetypes):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            not_transforms_selected = [
+                n for n in cmds.ls(selection=True)
+                if cmds.nodeType(n) != 'transform']
+            filtered_transforms = []
+            for transform in cmds.ls(selection=True, type='transform'):
+                for node in cmds.listRelatives(transform):
+                    if not cmds.getAttr(node + '.intermediateObject'):
+                        if cmds.nodeType(node) in nodetypes:
+                            filtered_transforms.append(transform)
+                            continue
+            cmds.select(not_transforms_selected + filtered_transforms)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
