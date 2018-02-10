@@ -31,12 +31,13 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
         # self.setFixedSize(QtCore.QSize(222, 234))
         self.setWindowTitle(WINDOWTITLE)
 
-        self._create_working_copy_button = QtWidgets.QPushButton(
-            'Create Sculpt')
+        self._create_working_copy_button = QtWidgets.QPushButton()
+        self._create_working_copy_button.setText('Create Sculpt')
         self._create_working_copy_button.released.connect(
             self._call_create_working_copy)
-        self._delete_working_copy_on_mesh_button = QtWidgets.QPushButton(
-            'Cancel Sculpt')
+
+        self._delete_working_copy_on_mesh_button = QtWidgets.QPushButton()
+        self._delete_working_copy_on_mesh_button.setText('Cancel Sculpt')
         self._delete_working_copy_on_mesh_button.released.connect(
             self._call_delete_working_copy)
 
@@ -60,8 +61,8 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
         self._apply_button = QtWidgets.QPushButton('Apply')
         self._apply_button.released.connect(self._call_apply)
         self._apply_button.setFont(font)
-        self._apply_on_new_blendshape_button = QtWidgets.QPushButton(
-            'Apply on new blendshape')
+        self._apply_on_new_blendshape_button = QtWidgets.QPushButton()
+        self._apply_on_new_blendshape_button.setText('Apply on new blendshape')
         self._apply_on_new_blendshape_button.released.connect(
             self._call_apply_on_new_blendshape)
 
@@ -109,11 +110,12 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
 
     #@undochunk
     def _call_apply(self):
-        apply_selected_working_copys()
+        apply_selected_working_copys(values=self._template_key_view.values())
 
     #@undochunk
     def _call_apply_on_new_blendshape(self):
-        create_blendshape_corrective_for_selected_working_copys()
+        create_blendshape_corrective_for_selected_working_copys(
+            values=self._template_key_view.values())
 
     def _call_set_template_values(self, value):
         self._template_key_view.set_values(KEY_TEMPLATES[value])
@@ -124,8 +126,7 @@ class TemplateSelecterView(QtWidgets.QWidget):
         super(TemplateSelecterView, self).__init__(parent)
         self.configure()
 
-        self._values = [
-            None, None, None, None, 0.0, 1.0, 0.0, None, None, None, None]
+        self._values = KEY_TEMPLATES[0]
 
         self._edit_mode = False
         self._edited_index = None
@@ -191,6 +192,9 @@ class TemplateSelecterView(QtWidgets.QWidget):
         self.repaint()
 
     def set_edit_mode(self, point):
+        """
+        this method check if the paint context must be passed in edit mode
+        """
         if not self.rect().contains(point):
             return
 
@@ -220,9 +224,34 @@ class TemplateSelecterView(QtWidgets.QWidget):
             painter.drawLine(line)
 
         pen = QtGui.QPen(QtGui.QColor('red'))
+        brush = QtGui.QBrush(QtGui.QColor('red'))
         painter.setPen(pen)
+        painter.setBrush(brush)
         for point in self._get_points():
             painter.drawEllipse(point, 2, 2)
+
+        if self._mouse_index_hovered is not None:
+            self._draw_interactive_point(painter)
+
+    def _draw_interactive_point(self, painter):
+        value = self.values()[self._mouse_index_hovered]
+        if value is None:
+            return
+
+        if self._edit_mode:
+            pen = QtGui.QPen(QtGui.QColor('white'))
+            brush = QtGui.QBrush(QtGui.QColor('white'))
+            painter.setPen(pen)
+            painter.setBrush(brush)
+            point = QtCore.QPoint(
+                self._mouse_index_hovered * 20,
+                70 * (1 - value) + 15)
+            painter.drawEllipse(point, 3, 3)
+        else:
+            point = QtCore.QPoint(
+                self._mouse_index_hovered * 20,
+                70 * (1 - value) + 15)
+            painter.drawEllipse(point, 3, 3)
 
     def _draw_grid(self, painter, rect):
         pen = QtGui.QPen(QtGui.QColor('#111111'))

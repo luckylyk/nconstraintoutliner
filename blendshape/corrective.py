@@ -1,5 +1,5 @@
 import pymel.core as pm
-import maya.OpenMaya as om
+import maya.api.OpenMaya as om2
 
 from maya_libs.selection.decorators import (
     need_maya_selection, filter_selection, selection_contains_at_least,
@@ -162,15 +162,16 @@ def get_corrective_blendshapes(mesh):
 @select_shape_transforms
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
-def create_blendshape_corrective_for_selected_working_copys():
+def create_blendshape_corrective_for_selected_working_copys(values=None):
     for mesh_transform in pm.ls(selection=True):
         if not mesh_transform.hasAttr(WORKING_MESH_ATTR):
             continue
         mesh = mesh_transform.attr(WORKING_MESH_ATTR).listConnections()[0]
-        create_blendshape_corrective_on_mesh(base=mesh, target=mesh_transform)
+        create_blendshape_corrective_on_mesh(
+            base=mesh, target=mesh_transform, values=values)
 
 
-def create_blendshape_corrective_on_mesh(base, target):
+def create_blendshape_corrective_on_mesh(base, target, values=None):
     """
     this method's creating a new corrective blendshape on a mesh and add the
     first target
@@ -187,7 +188,9 @@ def create_blendshape_corrective_on_mesh(base, target):
         longName=CORRECTIVE_BLENDSHAPE_ATTR,
         niceName=CORRECTIVE_BLENDSHAPE_ATTR.replace('_', ' '))
 
-    return corrective_blendshape
+    if values is not None:
+        set_animation_template_on_blendshape_target_weight(
+            blendshape=corrective_blendshape, target_index=0, values=values)
 
 
 def mesh_have_working_copy(mesh):
@@ -200,7 +203,7 @@ def mesh_have_working_copy(mesh):
         if node.hasAttr(WORKING_MESH_ATTR) or node.hasAttr(DISPLAY_MESH_ATTR)])
 
 
-def add_target_on_corrective_blendshape(blendshape, target, base):
+def add_target_on_corrective_blendshape(blendshape, target, base, values=None):
     '''
     this is a simple method to add target on a blendshape
     '''
@@ -212,25 +215,27 @@ def add_target_on_corrective_blendshape(blendshape, target, base):
         corrective_blendshape.inputTarget[0].inputTargetGroup.get(
             multiIndices=True)[-1] + 1)
 
-    value = blendshape.envelope.get()
-    blendshape.envelope.set(0)
     pm.blendShape(
-        blendshape, edit=True, before=True, target=(base, index, target, 1.0))
-    pm.blendShape(blendshape, edit=True, weight=(index, 1.0))
-    blendshape.envelope.set(value)
+        corrective_blendshape, edit=True,
+        before=True, target=(base, index, target, 1.0))
+
+    set_target_relative(corrective_blendshape, target, base)
+
+    set_animation_template_on_blendshape_target_weight(
+        blendshape=corrective_blendshape, target_index=index, values=values)
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
 @select_shape_transforms
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
-def apply_selected_working_copys():
+def apply_selected_working_copys(values=None):
     for transform in pm.ls(selection=True):
         if transform.hasAttr(WORKING_MESH_ATTR):
-            apply_working_copy(transform)
+            apply_working_copy(transform, values=values)
 
 
-def apply_working_copy(mesh, blendshape=None):
+def apply_working_copy(mesh, blendshape=None, values=None):
     '''
     this method is let apply a working mesh on his main shape
     it manage if a blendshape already exist or not.
@@ -244,68 +249,56 @@ def apply_working_copy(mesh, blendshape=None):
 
     if blendshape:
         add_target_on_corrective_blendshape(
-            blendshape, working_mesh, original_mesh)
+            blendshape, working_mesh, original_mesh, values=values)
 
     if blendshape is None:
         blendshapes = get_corrective_blendshapes(original_mesh)
         if not blendshapes:
             create_blendshape_corrective_on_mesh(
-                original_mesh, working_mesh)
+                original_mesh, working_mesh, values=values)
         else:
             add_target_on_corrective_blendshape(
-                blendshapes[0], working_mesh, original_mesh)
+                blendshapes[0], working_mesh, original_mesh, values=values)
 
     delete_working_copy_on_mesh(original_mesh)
 
 
-def create_clean_target(blendshape, target, base):
+def set_target_relative(blendshape, target, base):
     """
-    WIP METHOD TO AVOID DOUBLE TRANSFORM
+    the methode is setting the target relative to the base if a blendshape
+    exist to avoid double transformation when the target is applyied
+    Thanks Carlo Giesa, this one is yours :)
     """
+    target = pm.PyNode(target)
+    base = pm.PyNode(base)
 
-    intermediate_mesh = pm.createNode("mesh")
-    in_connection = blendshape.attr('input[0].inputGeometry').listConnections(
-        source=True, destination=False, plugs=True)[0]
-    in_connection >> intermediate_mesh.inMesh
-    pm.getAttr(intermediate_mesh.outMesh, type=True)
-    in_connection // intermediate_mesh.inMesh
+    blendshape = pm.PyNode(blendshape)
+    intermediate = pm.createNode('mesh')
+    in_mesh = blendshape.input[0].inputGeometry.listConnections(plugs=True)[0]
+    in_mesh >> intermediate.inMesh
+    intermediate.outMesh.get(type=True)  # this force mesh evaluation
+    in_mesh // intermediate.inMesh
 
-    selection_list = om.MSelectionList()
-    selection_list.add(target)
-    selection_list.add(base)
-    selection_list.add(intermediate_mesh.name())
+    selection_list = om2.MSelectionList()
+    selection_list.add(target.name())
+    selection_list.add(base.name())
+    selection_list.add(intermediate.name())
 
-    target_object = om.MObject()
-    base_object = om.MObject()
-    intermediate_object = om.MObject()
-
-    selection_list.getDependNode(0, target_object)
-    selection_list.getDependNode(1, base_object)
-    selection_list.getDependNode(2, intermediate_object)
+    target_fn_mesh = om2.MFnMesh(selection_list.getDagPath(0))
+    target_points = target_fn_mesh.getPoints()
+    base_points = om2.MFnMesh(selection_list.getDagPath(1)).getPoints()
+    intermediate_points = om2.MFnMesh(selection_list.getDagPath(2)).getPoints()
     selection_list.clear()
 
-    target_fn_esh = om.MFnMesh(target_object)
-    deform_fn_mesh = om.MFnMesh(base_object)
-    intermediate_fn_mesh = om.MFnMesh(intermediate_object)
-
-    target_points = om.MPointArray()
-    base_points = om.MPointArray()
-    intermediate_points = om.MPointArray()
-
-    target_fn_esh.getPoints(target_points)
-    deform_fn_mesh.getPoints(base_points)
-    intermediate_fn_mesh.getPoints(intermediate_points)
-
     i = 0
-    while (i < target_points.length()):
-        intermediate_points.set(
-            intermediate_points[i] + (target_points[i] - base_points[i]), i)
+    while (i < len(target_points)):
+        intermediate_points[i] = (
+            intermediate_points[i] + (target_points[i] - base_points[i]))
         i += 1
 
-    target_fn_esh.setPoints(intermediate_points)
-    target_fn_esh.updateSurface()
-
-    pm.delete(intermediate_mesh.listRelatives(parent=True))
+    target_fn_mesh.setPoints(intermediate_points)
+    target_fn_mesh.updateSurface()
+    pm.delete(intermediate.getParent())
 
 
 def set_animation_template_on_blendshape_target_weight(
@@ -325,4 +318,6 @@ def set_animation_template_on_blendshape_target_weight(
 
     for frame, value in frames_values.iteritems():
         pm.setKeyframe(
-            blendshape.weight[target_index], time=frame, value=value)
+            blendshape.weight[target_index], time=frame, value=value,
+            inTangentType='linear', outTangentType='linear')
+
