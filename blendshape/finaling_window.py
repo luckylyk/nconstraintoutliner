@@ -1,14 +1,16 @@
 
 import os
 from functools import partial
+
 from PySide2 import QtWidgets, QtGui, QtCore
-from .corrective import (
+
+from maya_libs.qt.main_window import get_maya_windows
+from .finaling import (
     create_working_copy_on_selection, delete_selected_working_copys,
     set_working_copys_transparency, apply_selected_working_copys,
     create_blendshape_corrective_for_selected_working_copys,
     get_working_copys_transparency)
 
-from maya_libs.qt.main_window import get_maya_windows
 
 WINDOWTITLE = "Corrective Blendshape"
 ICONPATH = os.path.join(
@@ -55,7 +57,7 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
             int(get_working_copys_transparency() * 100))
         self._display_slider.valueChanged.connect(self._call_slider_changed)
 
-        self._template_key_view = TemplateSelecterView(self)
+        self._animation_template_editor = AnimationTemplateEditor(self)
 
         font = QtGui.QFont()
         font.setBold(True)
@@ -68,7 +70,21 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
         self._apply_on_new_blendshape_button.released.connect(
             self._call_apply_on_new_blendshape)
 
-        self._template_buttons = []
+        self._animation_template_buttons = self._create_animation_template_buttons()
+        self._animation_template_layout = self._create_animation_template_layout()
+
+        self._layout = QtWidgets.QVBoxLayout(self)
+        self._layout.setSpacing(4)
+        self._layout.addLayout(self._create_delete_layout)
+        self._layout.addWidget(self._display_slider)
+        self._layout.addWidget(self._animation_template_editor)
+        self._layout.addLayout(self._animation_template_layout)
+        self._layout.addSpacing(4)
+        self._layout.addWidget(self._apply_button)
+        self._layout.addWidget(self._apply_on_new_blendshape_button)
+
+    def _create_animation_template_buttons(self):
+        buttons = []
         for index in range(1, 9):
             button = QtWidgets.QPushButton()
             button.setIcon(
@@ -78,26 +94,19 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
             button.setFixedSize(QtCore.QSize(47, 35))
             button.clicked.connect(
                 partial(self._call_set_template_values, index -1))
-            self._template_buttons.append(button)
+            buttons.append(button)
+        return buttons
 
-        self._grid_layout = QtWidgets.QGridLayout()
+    def _create_animation_template_layout(self):
+        layout = QtWidgets.QGridLayout()
         row, col = 0, 0
-        for button in self._template_buttons:
-            self._grid_layout.addWidget(button, row, col)
+        for button in self._animation_template_buttons:
+            layout.addWidget(button, row, col)
             col += 1
             if col > 3:
                 col = 0
                 row += 1
-
-        self._layout = QtWidgets.QVBoxLayout(self)
-        self._layout.setSpacing(4)
-        self._layout.addLayout(self._create_delete_layout)
-        self._layout.addWidget(self._display_slider)
-        self._layout.addWidget(self._template_key_view)
-        self._layout.addLayout(self._grid_layout)
-        self._layout.addSpacing(4)
-        self._layout.addWidget(self._apply_button)
-        self._layout.addWidget(self._apply_on_new_blendshape_button)
+        return layout
 
     #@undochunk
     def _call_create_working_copy(self):
@@ -113,20 +122,21 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
 
     #@undochunk
     def _call_apply(self):
-        apply_selected_working_copys(values=self._template_key_view.values())
+        apply_selected_working_copys(
+            values=self._animation_template_editor.values())
 
     #@undochunk
     def _call_apply_on_new_blendshape(self):
         create_blendshape_corrective_for_selected_working_copys(
-            values=self._template_key_view.values())
+            values=self._animation_template_editor.values())
 
     def _call_set_template_values(self, value):
-        self._template_key_view.set_values(KEY_TEMPLATES[value])
+        self._animation_template_editor.set_values(KEY_TEMPLATES[value])
 
 
-class TemplateSelecterView(QtWidgets.QWidget):
+class AnimationTemplateEditor(QtWidgets.QWidget):
     def __init__(self, parent=None):
-        super(TemplateSelecterView, self).__init__(parent)
+        super(AnimationTemplateEditor, self).__init__(parent)
         self.configure()
 
         self._values = KEY_TEMPLATES[0]
@@ -220,18 +230,8 @@ class TemplateSelecterView(QtWidgets.QWidget):
         rect = self.rect()
 
         self._draw_grid(painter, rect)
-
-        pen = QtGui.QPen(QtGui.QColor('orange'))
-        painter.setPen(pen)
-        for line in self._get_lines():
-            painter.drawLine(line)
-
-        pen = QtGui.QPen(QtGui.QColor('red'))
-        brush = QtGui.QBrush(QtGui.QColor('red'))
-        painter.setPen(pen)
-        painter.setBrush(brush)
-        for point in self._get_points():
-            painter.drawEllipse(point, 2, 2)
+        self._draw_lines(painter)
+        self._draw_points(painter)
 
         if self._mouse_index_hovered is not None:
             self._draw_interactive_point(painter)
@@ -288,17 +288,7 @@ class TemplateSelecterView(QtWidgets.QWidget):
             QtCore.QPoint(3, 15),
             QtCore.QPoint(rect.width() - 3, 15))
 
-    def _get_points(self):
-        points = []
-        for index, value in enumerate(self.values()):
-            if value is None:
-                continue
-            left = index * 20
-            height = 70 * (1 - value) + 15
-            points.append(QtCore.QPoint(left, height))
-        return points
-
-    def _get_lines(self):
+    def _draw_lines(self, painter):
         points = self._get_points()
         lines = []
         values = self.values()
@@ -317,7 +307,28 @@ class TemplateSelecterView(QtWidgets.QWidget):
             line = QtCore.QLine(point, points[index + 1])
             lines.append(line)
 
-        return lines
+        pen = QtGui.QPen(QtGui.QColor('orange'))
+        painter.setPen(pen)
+        for line in lines:
+            painter.drawLine(line)
+
+    def _draw_points(self, painter):
+        pen = QtGui.QPen(QtGui.QColor('red'))
+        brush = QtGui.QBrush(QtGui.QColor('red'))
+        painter.setPen(pen)
+        painter.setBrush(brush)
+        for point in self._get_points():
+            painter.drawEllipse(point, 2, 2)
+
+    def _get_points(self):
+        points = []
+        for index, value in enumerate(self.values()):
+            if value is None:
+                continue
+            left = index * 20
+            height = 70 * (1 - value) + 15
+            points.append(QtCore.QPoint(left, height))
+        return points
 
     def _get_edited_value(self, point):
         if not self._working_area.contains(point):
