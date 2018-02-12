@@ -22,7 +22,7 @@ KEY_TEMPLATES = [
     [None, None, None, None, None, 1.0, None, None, None, None, None],
     [None, None, None, None, None, 0.0, None, None, None, None, None],
     [None, None, None, None, 0.0, 1.0, None, None, None, None, None],
-    [None, None, None, None, 1.0, 0.0, None, None, None, None, None],
+    [None, None, None, None, None, 1.0, 0.0, None, None, None, None],
     [0.0, None, 0.15, 0.8, None, 1.0, None, 0.8, 0.15, None, 0.0],
     [None, None, None, None, None, None, None, None, None, None, None]]
 
