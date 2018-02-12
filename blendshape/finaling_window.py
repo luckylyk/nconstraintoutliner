@@ -5,7 +5,8 @@ from PySide2 import QtWidgets, QtGui, QtCore
 from .corrective import (
     create_working_copy_on_selection, delete_selected_working_copys,
     set_working_copys_transparency, apply_selected_working_copys,
-    create_blendshape_corrective_for_selected_working_copys)
+    create_blendshape_corrective_for_selected_working_copys,
+    get_working_copys_transparency)
 
 from maya_libs.qt.main_window import get_maya_windows
 
@@ -50,7 +51,8 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
 
         self._display_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self._display_slider.setRange(0, 100)
-        self._display_slider.setValue(0)
+        self._display_slider.setValue(
+            int(get_working_copys_transparency() * 100))
         self._display_slider.valueChanged.connect(self._call_slider_changed)
 
         self._template_key_view = TemplateSelecterView(self)
@@ -100,6 +102,7 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
     #@undochunk
     def _call_create_working_copy(self):
         create_working_copy_on_selection()
+        set_working_copys_transparency(self._display_slider.value() / 100.0)
 
     #@undochunk
     def _call_delete_working_copy(self):

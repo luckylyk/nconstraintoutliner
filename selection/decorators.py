@@ -75,20 +75,29 @@ def filter_selection(**ls_kwargs):
     return decorator
 
 
-def select_shape_transforms(func):
+def filter_transforms_by_children_types(*nodetypes):
     '''
-    this decorator select all transforms instead of shapes
+    this decorators remove from the current selection the transforms 
+    who not contains at least a specified nodetype shape. 
+    The shapes in selection are kept.
     '''
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        nodes = [
-            n if cmds.nodeType(n) == 'transform'
-            else cmds.listRelatives(n, parent=True)[0]
-            for n in cmds.ls(sl=True)]
-        cmds.select(nodes)
-        result = func(*args, **kwargs)
-        return result
-    return wrapper
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            not_transforms_selected = [
+                n for n in cmds.ls(selection=True)
+                if cmds.nodeType(n) != 'transform']
+            filtered_transforms = []
+            for transform in cmds.ls(selection=True, type='transform'):
+                for node in cmds.listRelatives(transform):
+                    if not cmds.getAttr(node + '.intermediateObject'):
+                        if cmds.nodeType(node) in nodetypes:
+                            filtered_transforms.append(transform)
+                            continue
+            cmds.select(not_transforms_selected + filtered_transforms)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def reorder_selection_by_nodetype(*nodetypes):
@@ -111,6 +120,22 @@ def reorder_selection_by_nodetype(*nodetypes):
             return func(*args, **kwargs)
         return wrapper
     return decorator
+
+
+def select_shape_transforms(func):
+    '''
+    this decorator select all transforms instead of shapes
+    '''
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        nodes = [
+            n if cmds.nodeType(n) == 'transform'
+            else cmds.listRelatives(n, parent=True)[0]
+            for n in cmds.ls(sl=True)]
+        cmds.select(nodes)
+        result = func(*args, **kwargs)
+        return result
+    return wrapper
 
 
 def selection_contains_at_least(number, node_type):
@@ -156,26 +181,6 @@ def selection_contains_exactly(number, node_type):
                     'The selection must contains exactly {} nodes {} '
                     'and it contains {}'.format(
                         number, node_type, len(typed_node_in_selection)))
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-def filter_transforms_with_children_types(*nodetypes):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            not_transforms_selected = [
-                n for n in cmds.ls(selection=True)
-                if cmds.nodeType(n) != 'transform']
-            filtered_transforms = []
-            for transform in cmds.ls(selection=True, type='transform'):
-                for node in cmds.listRelatives(transform):
-                    if not cmds.getAttr(node + '.intermediateObject'):
-                        if cmds.nodeType(node) in nodetypes:
-                            filtered_transforms.append(transform)
-                            continue
-            cmds.select(not_transforms_selected + filtered_transforms)
             return func(*args, **kwargs)
         return wrapper
     return decorator

@@ -3,7 +3,7 @@ import maya.api.OpenMaya as om2
 
 from maya_libs.selection.decorators import (
     need_maya_selection, filter_selection, selection_contains_at_least,
-    select_shape_transforms)
+    select_shape_transforms, filter_transforms_by_children_types)
 
 
 CORRECTIVE_BLENDSHAPE_NAME = 'corrective_blendshape'
@@ -20,6 +20,7 @@ DISPLAY_MESH_SG = 'TMP_DISPLAY_COPY_LAMBERTSG'
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
 @select_shape_transforms
+@filter_transforms_by_children_types('mesh')
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_working_copy_on_selection():
@@ -78,6 +79,7 @@ def create_working_copy(mesh):
         pm.shadingNode('blinn', asShader=True, name=WORKING_MESH_SHADER)
     working_copy_shader = pm.PyNode(WORKING_MESH_SHADER)
     working_copy_shader.color.set(1, .25, .33)
+    working_copy_shader.transparency.set(0, 0, 0)
 
     if not pm.objExists(DISPLAY_MESH_SHADER):
         pm.shadingNode('lambert', asShader=True, name=DISPLAY_MESH_SHADER)
@@ -95,6 +97,7 @@ def create_working_copy(mesh):
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
 @select_shape_transforms
+@filter_transforms_by_children_types('mesh')
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def delete_selected_working_copys():
@@ -129,6 +132,18 @@ def delete_working_copy_on_mesh(mesh):
             pm.delete([DISPLAY_MESH_SG, DISPLAY_MESH_SHADER])
 
 
+def get_working_copys_transparency():
+    """
+    this method's querying the working shaders transparency
+    """
+    if not pm.objExists(WORKING_MESH_SHADER):
+        return 0.0
+    if not pm.objExists(DISPLAY_MESH_SHADER):
+        return 0.0
+    working_copy_shader = pm.PyNode(WORKING_MESH_SHADER)
+    return working_copy_shader.transparency.get()[0]
+
+
 def set_working_copys_transparency(value):
     """
     this method's tweaking the working shaders to let user
@@ -160,6 +175,7 @@ def get_corrective_blendshapes(mesh):
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
 @select_shape_transforms
+@filter_transforms_by_children_types('mesh')
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_blendshape_corrective_for_selected_working_copys(values=None):
@@ -207,6 +223,7 @@ def add_target_on_corrective_blendshape(blendshape, target, base, values=None):
     '''
     this is a simple method to add target on a blendshape
     '''
+
     corrective_blendshape = pm.PyNode(blendshape)
     base = pm.PyNode(base)
     target = pm.PyNode(target)
@@ -215,11 +232,13 @@ def add_target_on_corrective_blendshape(blendshape, target, base, values=None):
         corrective_blendshape.inputTarget[0].inputTargetGroup.get(
             multiIndices=True)[-1] + 1)
 
-    pm.blendShape(
-        corrective_blendshape, edit=True,
-        before=True, target=(base, index, target, 1.0))
-
     set_target_relative(corrective_blendshape, target, base)
+    target.outMesh.get(type=True)
+
+    pm.blendShape(
+        corrective_blendshape, edit=True, before=True,
+        target=(base, index, target, 1.0))
+    pm.blendShape(corrective_blendshape, edit=True, weight=(index, 1.0))
 
     set_animation_template_on_blendshape_target_weight(
         blendshape=corrective_blendshape, target_index=index, values=values)
@@ -320,4 +339,13 @@ def set_animation_template_on_blendshape_target_weight(
         pm.setKeyframe(
             blendshape.weight[target_index], time=frame, value=value,
             inTangentType='linear', outTangentType='linear')
+
+    # this force maya to refresh the current frame in evaluation
+    # without those lines, maya does'nt refresh the current frame if a
+    # key is set at this timing.
+    if frames_values[pm.env.time] is not None:
+        pm.blendShape(
+            blendshape, edit=True,
+            weight=(target_index, frames_values[pm.env.time]))
+
 
