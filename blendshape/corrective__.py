@@ -1,5 +1,6 @@
 import pymel.core as pm
 import maya.api.OpenMaya as om2
+from maya import cmds
 
 from maya_libs.selection.decorators import (
     need_maya_selection, filter_selection, selection_contains_at_least,
@@ -24,13 +25,13 @@ DISPLAY_MESH_SG = 'TMP_DISPLAY_COPY_LAMBERTSG'
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_working_copy_on_selection():
-    for transform in pm.ls(selection=True):
+    for transform in cmds.ls(selection=True):
         if mesh_have_working_copy(transform):
             continue
         create_working_copy(transform)
 
 
-def create_working_copy(mesh):
+def create_working_copy(original_mesh):
     """
     this method create two meshes linked to the
     given mesh's message attribute.
@@ -43,57 +44,55 @@ def create_working_copy(mesh):
     a red shader is assigned to the working copy
     a blue shader is assigned to the display copy
     """
-    original_mesh = pm.PyNode(mesh)
-    working_copy = original_mesh.duplicate()[0]
-    display_copy = original_mesh.duplicate()[0]
+    working_copy = cmds.duplicate(original_mesh)[0]
+    display_copy = cmds.duplicate(original_mesh)[0]
+    print working_copy, display_copy
 
     # clean intermediate duplicated shapes
-    for shape in working_copy.getShapes() + display_copy.getShapes():
-        if shape.intermediateObject.get() is True:
-            pm.delete(shape)
+    for shape in cmds.listRelatives(working_copy, shapes=True) + cmds.listRelatives(display_copy, shapes=True):
+        if cmds.getAttr(shape + '.intermediateObject') is True:
+            cmds.delete(shape)
 
-    original_mesh.lodVisibility.set(False)
-    working_copy.rename(working_copy.name() + '_f' + str(pm.env.time))
-    for shape in display_copy.getShapes():
-        shape.overrideEnabled.set(True)
-        shape.overrideDisplayType.set(2)
+    cmds.setAttr(original_mesh + '.lodVisibility', False)
+    for shape in cmds.listRelatives(display_copy, shapes=True):
+        cmds.setAttr(shape + '.overrideEnabled', True)
+        cmds.setAttr(shape + '.overrideDisplayType', 2)
+    working_copy = cmds.rename(
+        working_copy, working_copy + '_f' + str(cmds.currentTime(q=1)))
 
     # create and link attibutes to connect working meshes to original mesh.
-    pm.addAttr(
+    cmds.addAttr(
         working_copy,
         attributeType='message',
         longName=WORKING_MESH_ATTR,
         niceName=WORKING_MESH_ATTR.replace('_', ' '))
 
-    pm.addAttr(
+    cmds.addAttr(
         display_copy,
         attributeType='message',
         longName=DISPLAY_MESH_ATTR,
         niceName=DISPLAY_MESH_ATTR.replace('_', ' '))
 
-    original_mesh.message >> working_copy.is_working_copy_mesh
-    original_mesh.message >> display_copy.is_display_copy_mesh
+    cmds.connectAttr(original_mesh + '.message', working_copy + '.' + WORKING_MESH_ATTR)
+    cmds.connectAttr(original_mesh + '.message', display_copy + '.' + DISPLAY_MESH_ATTR)
 
     # create shaders
-    if not pm.objExists(WORKING_MESH_SHADER):
-        pm.shadingNode('blinn', asShader=True, name=WORKING_MESH_SHADER)
-    working_copy_shader = pm.PyNode(WORKING_MESH_SHADER)
-    working_copy_shader.color.set(1, .25, .33)
-    working_copy_shader.transparency.set(0, 0, 0)
+    if not cmds.objExists(WORKING_MESH_SHADER):
+        cmds.shadingNode('blinn', asShader=True, name=WORKING_MESH_SHADER)
+    cmds.setAttr(WORKING_MESH_SHADER + '.color', 1, .25, .33)
+    cmds.setAttr(WORKING_MESH_SHADER + '.transparency', 0, 0, 0)
 
-    if not pm.objExists(DISPLAY_MESH_SHADER):
-        pm.shadingNode('lambert', asShader=True, name=DISPLAY_MESH_SHADER)
-    display_copy_shader = pm.PyNode(DISPLAY_MESH_SHADER)
-    display_copy_shader.color.set(0, .25, 1)
-    display_copy_shader.transparency.set(1, 1, 1)
+    if not cmds.objExists(DISPLAY_MESH_SHADER):
+        cmds.shadingNode('lambert', asShader=True, name=DISPLAY_MESH_SHADER)
+    cmds.setAttr(DISPLAY_MESH_SHADER + '.color', 0, .25, 1)
+    cmds.setAttr(DISPLAY_MESH_SHADER + '.transparency', 1, 1, 1)
 
-    pm.select(working_copy)
-    pm.hyperShade(working_copy, assign=working_copy_shader)
-    pm.select(display_copy)
-    pm.hyperShade(display_copy, assign=display_copy_shader)
+    cmds.select(working_copy)
+    cmds.hyperShade(working_copy, assign=WORKING_MESH_SHADER)
+    cmds.select(display_copy)
+    cmds.hyperShade(display_copy, assign=DISPLAY_MESH_SHADER)
 
-    pm.select(working_copy)
-    pm.SculptGeometryTool()
+    cmds.select(working_copy)
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
@@ -113,36 +112,33 @@ def delete_working_copy_on_mesh(mesh):
     '''
     This method let the user cancel his work and delete current working copy
     '''
-    original_mesh = pm.PyNode(mesh)
     working_meshes = [
-        node for node in original_mesh.message.listConnections()
-        if node.hasAttr(WORKING_MESH_ATTR) or node.hasAttr(DISPLAY_MESH_ATTR)]
+        node for node in cmds.listConnections(mesh + '.message')
+        if cmds.attributeQuery(WORKING_MESH_ATTR, node=node, exists=True) or
+        cmds.attributeQuery(DISPLAY_MESH_ATTR, node=node, exists=True)]
 
-    original_mesh.lodVisibility.set(True)
-    pm.delete(working_meshes)
+    cmds.setAttr(mesh + '.lodVisibility', True)
+    cmds.delete(working_meshes)
 
     # clean shaders
-    if not pm.objExists(WORKING_MESH_SG):
-        working_copy_shader_group = pm.PyNode(WORKING_MESH_SG)
-        if not working_copy_shader_group.dagSetMembers.listConnections():
-            pm.delete([WORKING_MESH_SG, WORKING_MESH_SHADER])
+    if not cmds.objExists(WORKING_MESH_SG):
+        if not cmds.listConnections(WORKING_MESH_SG + '.dagSetMembers'):
+            cmds.delete([WORKING_MESH_SG, WORKING_MESH_SHADER])
 
-    if not pm.objExists(DISPLAY_MESH_SG):
-        display_copy_shader_group = pm.PyNode(DISPLAY_MESH_SG)
-        if not display_copy_shader_group.dagSetMembers.listConnections():
-            pm.delete([DISPLAY_MESH_SG, DISPLAY_MESH_SHADER])
+    if not cmds.objExists(DISPLAY_MESH_SG):
+        if not cmds.listConnections(DISPLAY_MESH_SG + '.dagSetMembers'):
+            cmds.delete([DISPLAY_MESH_SG, DISPLAY_MESH_SHADER])
 
 
 def get_working_copys_transparency():
     """
     this method's querying the working shaders transparency
     """
-    if not pm.objExists(WORKING_MESH_SHADER):
+    if not cmds.objExists(WORKING_MESH_SHADER):
         return 0.0
-    if not pm.objExists(DISPLAY_MESH_SHADER):
+    if not cmds.objExists(DISPLAY_MESH_SHADER):
         return 0.0
-    working_copy_shader = pm.PyNode(WORKING_MESH_SHADER)
-    return working_copy_shader.transparency.get()[0]
+    return cmds.getAttr(WORKING_MESH_SHADER + '.transparency')[0][0]
 
 
 def set_working_copys_transparency(value):
@@ -150,16 +146,13 @@ def set_working_copys_transparency(value):
     this method's tweaking the working shaders to let user
     compare working mesh and original mesh
     """
-    if not pm.objExists(WORKING_MESH_SHADER):
-        return pm.warning('working mesh shader not found')
-    if not pm.objExists(DISPLAY_MESH_SHADER):
-        return pm.warning('working mesh shader not found')
+    if not cmds.objExists(WORKING_MESH_SHADER):
+        return cmds.warning('working mesh shader not found')
+    if not cmds.objExists(DISPLAY_MESH_SHADER):
+        return cmds.warning('working mesh shader not found')
 
-    working_copy_shader = pm.PyNode(WORKING_MESH_SHADER)
-    display_copy_shader = pm.PyNode(DISPLAY_MESH_SHADER)
-
-    working_copy_shader.transparency.set(value, value, value)
-    display_copy_shader.transparency.set(1 - value, 1 - value, 1 - value)
+    cmds.setAtttr(WORKING_MESH_SHADER + ".transparency", value, value, value)
+    cmds.setAtttr(DISPLAY_MESH_SHADER + ".transparency", 1-value, 1-value, 1-value)
 
 
 def get_corrective_blendshapes(mesh):
@@ -167,17 +160,10 @@ def get_corrective_blendshapes(mesh):
     this method return a list off all corrective blendshapes
     present in the history
     """
-    original_mesh = pm.PyNode(mesh)
-    # retrieve the blendhspae connected to message combined to a listHistory.
-    # This is to keep the history order, but be sure the blendshape is
-    # from the good mesh in complexe setup
-    # (there's probably smarter way to have this info ...)
-    blendshape_connected = original_mesh.message.listConnections()
     return [
-        node for node in original_mesh.inMesh.listHistory()
-        if isinstance(node, pm.nt.BlendShape) and
-        node.hasAttr(CORRECTIVE_BLENDSHAPE_ATTR) and
-        node in blendshape_connected]
+        node for node in cmds.listHistory(mesh + '.inMesh')
+        if cmds.nodeType(node) == 'blendShape' and
+        cmds.attributeQuery(CORRECTIVE_BLENDSHAPE_ATTR, node=node, exists=True)]
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
@@ -186,12 +172,12 @@ def get_corrective_blendshapes(mesh):
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_blendshape_corrective_for_selected_working_copys(values=None):
-    for mesh_transform in pm.ls(selection=True):
-        if not mesh_transform.hasAttr(WORKING_MESH_ATTR):
+    for transform in cmds.ls(selection=True):
+        if not cmds.attributeQuery(WORKING_MESH_ATTR, node=transform, exists=True):
             continue
-        mesh = mesh_transform.attr(WORKING_MESH_ATTR).listConnections()[0]
+        base = cmds.listConnections(transform + '.' + WORKING_MESH_ATTR)[0]
         create_blendshape_corrective_on_mesh(
-            base=mesh, target=mesh_transform, values=values)
+            base=base, target=transform, values=values)
 
 
 def create_blendshape_corrective_on_mesh(base, target, values=None):
@@ -199,19 +185,15 @@ def create_blendshape_corrective_on_mesh(base, target, values=None):
     this method's creating a new corrective blendshape on a mesh and add the
     first target
     """
-    base = pm.PyNode(base)
-    target = pm.PyNode(target)
-    name = base.name() + '_' + CORRECTIVE_BLENDSHAPE_NAME
+    name = base + '_' + CORRECTIVE_BLENDSHAPE_NAME
 
-    corrective_blendshape = pm.blendShape(
+    corrective_blendshape = cmds.blendShape(
         target, base, name=name, before=True, weight=(0, 1))[0]
 
-    pm.addAttr(
-        corrective_blendshape, attributeType='message',
+    cmds.addAttr(
+        corrective_blendshape, attributeType='bool',
         longName=CORRECTIVE_BLENDSHAPE_ATTR,
         niceName=CORRECTIVE_BLENDSHAPE_ATTR.replace('_', ' '))
-
-    base.message >> corrective_blendshape.attr(CORRECTIVE_BLENDSHAPE_ATTR)
 
     if values is not None:
         set_animation_template_on_blendshape_target_weight(
@@ -223,9 +205,12 @@ def mesh_have_working_copy(mesh):
     This method query if a working copy is currently in use
     it should never append
     '''
+    if cmds.listConnections(mesh + '.message') is None:
+        return False
     return bool([
-        node for node in mesh.message.listConnections()
-        if node.hasAttr(WORKING_MESH_ATTR) or node.hasAttr(DISPLAY_MESH_ATTR)])
+        node for node in cmds.listConnections(mesh + '.message')
+        if cmds.attributeQuery(WORKING_MESH_ATTR, node=node, exists=True) or
+        cmds.attributeQuery(DISPLAY_MESH_ATTR, node=node, exists=True)])
 
 
 def add_target_on_corrective_blendshape(blendshape, target, base, values=None):
@@ -233,24 +218,19 @@ def add_target_on_corrective_blendshape(blendshape, target, base, values=None):
     this is a simple method to add target on a blendshape
     '''
 
-    corrective_blendshape = pm.PyNode(blendshape)
-    base = pm.PyNode(base)
-    target = pm.PyNode(target)
-
     index = int(
-        corrective_blendshape.inputTarget[0].inputTargetGroup.get(
+        cmds.getAttr(
+            blendshape + '.inputTarget[0].inputTargetGroup',
             multiIndices=True)[-1] + 1)
 
-    set_target_relative(corrective_blendshape, target, base)
-    target.outMesh.get(type=True)
+    set_target_relative(blendshape, target, base)
 
-    pm.blendShape(
-        corrective_blendshape, edit=True, before=True,
-        target=(base, index, target, 1.0))
-    pm.blendShape(corrective_blendshape, edit=True, weight=(index, 1.0))
+    cmds.blendShape(
+        blendshape, edit=True, before=True,
+        target=(base, index, target, 0.0))
 
     set_animation_template_on_blendshape_target_weight(
-        blendshape=corrective_blendshape, target_index=index, values=values)
+        blendshape=blendshape, target_index=index, values=values)
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
@@ -258,22 +238,21 @@ def add_target_on_corrective_blendshape(blendshape, target, base, values=None):
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def apply_selected_working_copys(values=None):
-    for transform in pm.ls(selection=True):
-        if transform.hasAttr(WORKING_MESH_ATTR):
+    for transform in cmds.ls(selection=True):
+        if cmds.attributeQuery(WORKING_MESH_ATTR, node=transform, exists=True):
             apply_working_copy(transform, values=values)
 
 
-def apply_working_copy(mesh, blendshape=None, values=None):
+def apply_working_copy(working_mesh, blendshape=None, values=None):
     '''
     this method is let apply a working mesh on his main shape
     it manage if a blendshape already exist or not.
     '''
-    working_mesh = pm.PyNode(mesh)
-    if not working_mesh.hasAttr(WORKING_MESH_ATTR):
+    if not cmds.attributeQuery(WORKING_MESH_ATTR, node=working_mesh, exists=True):
         pm.warning('please, select working mesh')
 
-    original_mesh = working_mesh.attr(
-        WORKING_MESH_ATTR).listConnections()[0]
+    original_mesh = cmds.listConnections(
+        working_mesh + '.' + WORKING_MESH_ATTR)[0]
 
     if blendshape:
         add_target_on_corrective_blendshape(
@@ -289,6 +268,58 @@ def apply_working_copy(mesh, blendshape=None, values=None):
                 blendshapes[0], working_mesh, original_mesh, values=values)
 
     delete_working_copy_on_mesh(original_mesh)
+
+# def set_target_relative(blendshape, target, base):
+#     """
+#     the methode is setting the target relative to the base if a blendshape
+#     exist to avoid double transformation when the target is applyied
+#     Thanks Carlo Giesa, this one is yours :)
+#     """
+#     target = pm.PyNode(target)
+#     base = pm.PyNode(base)
+ 
+#     intermediate_mesh = pm.createNode("mesh")
+#     in_connection = blendshape.attr('input[0].inputGeometry').listConnections(
+#         source=True, destination=False, plugs=True)[0]
+#     in_connection >> intermediate_mesh.inMesh
+#     intermediate_mesh.outMesh.get(type=True)
+#     in_connection // intermediate_mesh.inMesh
+
+#     selection_list = om.MSelectionList()
+#     selection_list.add(target.name())
+#     selection_list.add(base.name())
+#     selection_list.add(intermediate_mesh.name())
+
+#     target_object = om.MObject()
+#     base_object = om.MObject()
+#     intermediate_object = om.MObject()
+
+#     selection_list.getDependNode(0, target_object)
+#     selection_list.getDependNode(1, base_object)
+#     selection_list.getDependNode(2, intermediate_object)
+#     selection_list.clear()
+
+#     target_fn_esh = om.MFnMesh(target_object)
+#     deform_fn_mesh = om.MFnMesh(base_object)
+#     intermediate_fn_mesh = om.MFnMesh(intermediate_object)
+
+#     target_points = om.MPointArray()
+#     base_points = om.MPointArray()
+#     intermediate_points = om.MPointArray()
+
+#     target_fn_esh.getPoints(target_points)
+#     deform_fn_mesh.getPoints(base_points)
+#     intermediate_fn_mesh.getPoints(intermediate_points)
+
+#     i = 0
+#     while (i < target_points.length()):
+#         intermediate_points.set(
+#             intermediate_points[i] + (target_points[i] - base_points[i]), i)
+#         i += 1
+
+#     target_fn_esh.setPoints(intermediate_points)
+#     target_fn_esh.updateSurface()
+#     pm.delete(intermediate_mesh.listRelatives(parent=True))
 
 
 def set_target_relative(blendshape, target, base):
@@ -326,7 +357,7 @@ def set_target_relative(blendshape, target, base):
 
     target_fn_mesh.setPoints(intermediate_points)
     target_fn_mesh.updateSurface()
-    pm.delete(intermediate.getParent())
+    #pm.delete(intermediate.getParent())
 
 
 def set_animation_template_on_blendshape_target_weight(
@@ -339,22 +370,14 @@ def set_animation_template_on_blendshape_target_weight(
     if values is None or not any([1 for v in values if v is not None]):
         return
 
-    blendshape = pm.PyNode(blendshape)
-    frames = range(int(pm.env.time - 5), int(pm.env.time + 6))
+    time = cmds.currentTime(query=True)
+    frames = range(int(time - 5), int(time + 6))
     frames_values = {
         f: values[i] for i, f in enumerate(frames) if values[i] is not None}
 
     for frame, value in frames_values.iteritems():
-        pm.setKeyframe(
+        cmds.setKeyframe(
             blendshape.weight[target_index], time=frame, value=value,
             inTangentType='linear', outTangentType='linear')
-
-    # this force maya to refresh the current frame in evaluation
-    # without those lines, maya does'nt refresh the current frame if a
-    # key is set at this timing.
-    if frames_values[pm.env.time] is not None:
-        pm.blendShape(
-            blendshape, edit=True,
-            weight=(target_index, frames_values[pm.env.time]))
 
 
