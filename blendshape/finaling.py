@@ -244,6 +244,9 @@ def add_target_on_corrective_blendshape(blendshape, target, base, values=None):
     set_target_relative(corrective_blendshape, target, base)
     target.outMesh.get(type=True)
 
+    # the target is created with "1.0" as weight. But it still created with
+    # value set to 0.0. If the value is not set to 1.0, strange bug's appears
+    # I have to set the target after if I want my value to 1.0 (life's strange)
     pm.blendShape(
         corrective_blendshape, edit=True, before=True,
         target=(base, index, target, 1.0))
