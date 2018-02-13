@@ -28,6 +28,7 @@ def create_working_copy_on_selection():
         if mesh_have_working_copy(transform):
             continue
         create_working_copy(transform)
+    pm.mel.eval('SculptGeometryToolOptions')
 
 
 def create_working_copy(mesh):
@@ -93,7 +94,6 @@ def create_working_copy(mesh):
     pm.hyperShade(display_copy, assign=display_copy_shader)
 
     pm.select(working_copy)
-    pm.SculptGeometryTool()
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
@@ -171,7 +171,7 @@ def get_corrective_blendshapes(mesh):
     # retrieve the blendhspae connected to message combined to a listHistory.
     # This is to keep the history order, but be sure the blendshape is
     # from the good mesh in complexe setup
-    # (there's probably smarter way to have this info ...)
+    # (there's probably smarter way to get this info ...)
     blendshape_connected = original_mesh.message.listConnections()
     return [
         node for node in original_mesh.inMesh.listHistory()
