@@ -3,7 +3,8 @@ import maya.api.OpenMaya as om2
 
 from maya_libs.selection.decorators import (
     need_maya_selection, filter_selection, selection_contains_at_least,
-    select_shape_transforms, filter_transforms_by_children_types)
+    select_shape_transforms, filter_transforms_by_children_types,
+    selection_contains_exactly, keep_maya_selection)
 
 
 CORRECTIVE_BLENDSHAPE_NAME = 'corrective_blendshape'
@@ -11,6 +12,8 @@ CORRECTIVE_BLENDSHAPE_ATTR = 'is_corrective_blendshape'
 
 WORKING_MESH_ATTR = 'is_working_copy_mesh'
 DISPLAY_MESH_ATTR = 'is_display_copy_mesh'
+TARGET_MESH_ATTR = 'is_a_target_edit'
+BLENDSHAPE_EDIT_ATTR = 'is_blendshape_edit'
 
 WORKING_MESH_SHADER = 'TMP_WORKING_COPY_BLINN'
 WORKING_MESH_SG = 'TMP_WORKING_COPY_BLINNSG'
@@ -27,26 +30,33 @@ def create_working_copy_on_selection():
     for transform in pm.ls(selection=True):
         if mesh_have_working_copy(transform):
             continue
-        create_working_copy(transform)
+        if transform.hasAttr(WORKING_MESH_ATTR):
+            continue
+        if transform.hasAttr(DISPLAY_MESH_ATTR):
+            continue
+        setup_working_copy(transform)
     pm.mel.eval('SculptGeometryToolOptions')
 
 
-def create_working_copy(mesh):
+def setup_working_copy(mesh, working_copy=None, display_copy=None):
     """
-    this method create two meshes linked to the
-    given mesh's message attribute.
+    this method setup the working editing environment.
+    the working copy and the display copy are temporary meshes used
+    to make and previzualize the mesh edit.
+    if working_copy and display_copy are let as None, the method will duplicate
+    the specified one.
 
     the original mesh is hidden during the procedure (lodVisibility)
     the working copy, is a mesh for create the deformation.
     the display copy, is a copy (hidden by default), to compare the working
-        copy to the original mesh.
+    copy to the original mesh.
 
     a red shader is assigned to the working copy
     a blue shader is assigned to the display copy
     """
     original_mesh = pm.PyNode(mesh)
-    working_copy = original_mesh.duplicate()[0]
-    display_copy = original_mesh.duplicate()[0]
+    working_copy = pm.PyNode(working_copy) if working_copy else original_mesh.duplicate()[0]
+    display_copy = pm.PyNode(display_copy) if display_copy else original_mesh.duplicate()[0]
 
     # clean intermediate duplicated shapes
     for shape in working_copy.getShapes() + display_copy.getShapes():
@@ -94,6 +104,56 @@ def create_working_copy(mesh):
     pm.hyperShade(display_copy, assign=display_copy_shader)
 
     pm.select(working_copy)
+
+
+def setup_edit_target_working_copy(mesh, blendshape, target_index):
+    '''
+    this method setup the working editing environment to edit an target.
+    To get a working copy of the mesh, it force the blendshape envelope to 1
+    and the selected target to 1. To generate the display copy it set the
+    target value to 0.0.
+
+    When the working setup is done, the envelope and target's original values
+    are set back.
+
+    on the working mesh an attribute "is_a_target_edit" and the edited index
+    is stored as value. The blendshape message is connected to the 
+    working copy message. This is useful for the applying procedure. To notify
+    that's an target edit instead of a target creation, an know which
+    blendshape target is modified.
+    '''
+    original_mesh = pm.PyNode(mesh)
+    original_target_value = blendshape.weight[target_index].get()
+    original_envelope_value = blendshape.envelope.get()
+
+    blendshape.envelope.set(1.0)
+
+    pm.blendShape(blendshape, edit=True, weight=(target_index, 1.0))
+    working_copy = original_mesh.duplicate()[0]
+
+    pm.blendShape(blendshape, edit=True, weight=(target_index, 0.0))
+    display_copy = original_mesh.duplicate()[0]
+
+    setup_working_copy(original_mesh, working_copy, display_copy)
+
+    pm.addAttr(
+        working_copy,
+        attributeType='byte',
+        longName=TARGET_MESH_ATTR,
+        niceName=TARGET_MESH_ATTR.replace('_', ' '))
+
+    pm.addAttr(
+        working_copy,
+        attributeType='message',
+        longName=BLENDSHAPE_EDIT_ATTR,
+        niceName=BLENDSHAPE_EDIT_ATTR.replace('_', ' '))
+
+    working_copy.attr(TARGET_MESH_ATTR).set(target_index)
+    blendshape.message >> working_copy.attr(BLENDSHAPE_EDIT_ATTR)
+
+    blendshape.envelope.set(original_envelope_value)
+    pm.blendShape(
+        blendshape, edit=True, weight=(target_index, original_target_value))
 
 
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
@@ -186,12 +246,17 @@ def get_corrective_blendshapes(mesh):
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def create_blendshape_corrective_for_selected_working_copys(values=None):
-    for mesh_transform in pm.ls(selection=True):
-        if not mesh_transform.hasAttr(WORKING_MESH_ATTR):
+    result = []
+    for working_copy in pm.ls(selection=True):
+        if not working_copy.hasAttr(WORKING_MESH_ATTR):
             continue
-        mesh = mesh_transform.attr(WORKING_MESH_ATTR).listConnections()[0]
+        original_mesh = working_copy.attr(WORKING_MESH_ATTR).listConnections()[0]
         create_blendshape_corrective_on_mesh(
-            base=mesh, target=mesh_transform, values=values)
+            base=original_mesh, target=working_copy, values=values)
+        delete_working_copy_on_mesh(original_mesh)
+        result.append(original_mesh)
+    if result:
+        pm.select(result)
 
 
 def create_blendshape_corrective_on_mesh(base, target, values=None):
@@ -256,14 +321,46 @@ def add_target_on_corrective_blendshape(blendshape, target, base, values=None):
         blendshape=corrective_blendshape, target_index=index, values=values)
 
 
+def apply_edit_target_working_copy(working_copy):
+    """
+    this method apply a target edit.
+    To do that, it retrieve information about the setup from the working copy.
+    Set the blendshapetarget to 0.0 and use the display copy to to calculate
+    the relative target mesh.
+    Connect the working mesh to the correct blendshape input target to update
+    it.
+    Put back the target value to his original value to clean the scene.
+    """
+    working_copy = pm.PyNode(working_copy)
+    original_mesh = working_copy.attr(WORKING_MESH_ATTR).listConnections()[0]
+    display_copy = [
+        node for node in original_mesh.message.listConnections()
+        if node.hasAttr(DISPLAY_MESH_ATTR)][0]
+
+    blendshape = working_copy.attr(BLENDSHAPE_EDIT_ATTR).listConnections()[0]
+    target_index = int(working_copy.attr(TARGET_MESH_ATTR).get())
+    target_original_value = blendshape.weight[target_index].get()
+    blendshape_input = (
+        blendshape.inputTarget[target_index].inputTargetGroup[0].
+        inputTargetItem[6000].inputGeomTarget)  # ok it's a long path :)
+
+    blendshape.weight[target_index].set(0)
+    set_target_relative(blendshape, working_copy, display_copy)
+    working_copy.worldMesh[0] >> blendshape_input
+
+    blendshape.weight[target_index].set(target_original_value)
+
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
 @select_shape_transforms
 @selection_contains_at_least(1, 'transform')
 @need_maya_selection
 def apply_selected_working_copys(values=None):
-    for transform in pm.ls(selection=True):
-        if transform.hasAttr(WORKING_MESH_ATTR):
-            apply_working_copy(transform, values=values)
+    result = []
+    for worky_copy in pm.ls(selection=True):
+        if worky_copy.hasAttr(WORKING_MESH_ATTR):
+            result.append(apply_working_copy(worky_copy, values=values))
+    if result:
+        pm.select(result)
 
 
 def apply_working_copy(mesh, blendshape=None, values=None):
@@ -278,11 +375,14 @@ def apply_working_copy(mesh, blendshape=None, values=None):
     original_mesh = working_mesh.attr(
         WORKING_MESH_ATTR).listConnections()[0]
 
-    if blendshape:
+    if working_mesh.hasAttr(TARGET_MESH_ATTR):
+        apply_edit_target_working_copy(working_mesh)
+
+    elif blendshape:
         add_target_on_corrective_blendshape(
             blendshape, working_mesh, original_mesh, values=values)
 
-    if blendshape is None:
+    elif blendshape is None:
         blendshapes = get_corrective_blendshapes(original_mesh)
         if not blendshapes:
             create_blendshape_corrective_on_mesh(
@@ -292,6 +392,26 @@ def apply_working_copy(mesh, blendshape=None, values=None):
                 blendshapes[0], working_mesh, original_mesh, values=values)
 
     delete_working_copy_on_mesh(original_mesh)
+    return original_mesh
+
+
+@filter_selection(type=('mesh', 'transform'), objectsOnly=True)
+@select_shape_transforms
+@selection_contains_exactly(1, 'transform')
+def get_targets_list_from_selection():
+    original_mesh = pm.ls(selection=True)[0]
+    return original_mesh, get_targets_list_from_mesh(original_mesh)
+
+def get_targets_list_from_mesh(mesh):
+    '''
+    this methode return a list tuple containing the blendshape corrective
+    connected and the target available per blendshapes
+    '''
+    mesh = pm.PyNode(mesh)
+    blendshapes = get_corrective_blendshapes(mesh)
+    if not blendshapes:
+        return None
+    return [(bs, pm.listAttr(bs.w, multi=True)) for bs in blendshapes]
 
 
 def set_target_relative(blendshape, target, base):
@@ -359,5 +479,3 @@ def set_animation_template_on_blendshape_target_weight(
         pm.blendShape(
             blendshape, edit=True,
             weight=(target_index, frames_values[pm.env.time]))
-
-

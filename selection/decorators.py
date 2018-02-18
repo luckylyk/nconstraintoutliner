@@ -176,9 +176,9 @@ def selection_contains_exactly(number, node_type):
         @wraps(func)
         def wrapper(*args, **kwargs):
             typed_node_in_selection = cmds.ls(selection=True, type=node_type)
-            if len(typed_node_in_selection) == number:
+            if len(typed_node_in_selection) != number:
                 return cmds.warning(
-                    'The selection must contains exactly {} nodes {} '
+                    'The selection must contains exactly {} node(s) {} '
                     'and it contains {}'.format(
                         number, node_type, len(typed_node_in_selection)))
             return func(*args, **kwargs)
