@@ -1,3 +1,9 @@
+"""
+this module is a simple interface to use the finaling.py module
+the correct way to open this ui is:
+    from maya_libs.blendshape import finaling_window
+    finaling_window.launch()
+"""
 
 import os
 from functools import partial
@@ -9,7 +15,8 @@ from .finaling import (
     create_working_copy_on_selection, delete_selected_working_copys,
     set_working_copys_transparency, apply_selected_working_copys,
     create_blendshape_corrective_for_selected_working_copys,
-    get_working_copys_transparency)
+    get_working_copys_transparency, get_targets_list_from_selection,
+    setup_edit_target_working_copy)
 
 
 WINDOWTITLE = "Corrective Blendshape"
@@ -39,23 +46,35 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
         self._create_working_copy_button.released.connect(
             self._call_create_working_copy)
 
+        self._edit_target_button = QtWidgets.QPushButton()
+        self._edit_target_button.setText('Edit Target')
+        self._edit_target_button.clicked.connect(self._call_edit_target)
+
+        self._create_edit_layout = QtWidgets.QHBoxLayout()
+        self._create_edit_layout.setContentsMargins(0, 0, 0, 0)
+        self._create_edit_layout.setSpacing(4)
+        self._create_edit_layout.addWidget(self._create_working_copy_button)
+        self._create_edit_layout.addWidget(self._edit_target_button)
+
         self._delete_working_copy_on_mesh_button = QtWidgets.QPushButton()
         self._delete_working_copy_on_mesh_button.setText('Cancel Sculpt')
         self._delete_working_copy_on_mesh_button.released.connect(
             self._call_delete_working_copy)
 
-        self._create_delete_layout = QtWidgets.QHBoxLayout()
-        self._create_delete_layout.setContentsMargins(0, 0, 0, 0)
-        self._create_delete_layout.setSpacing(4)
-        self._create_delete_layout.addWidget(self._create_working_copy_button)
-        self._create_delete_layout.addWidget(
-            self._delete_working_copy_on_mesh_button)
-
+        self._slider_after_label = QtWidgets.QLabel('after')
         self._display_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self._display_slider.setRange(0, 100)
         self._display_slider.setValue(
             int(get_working_copys_transparency() * 100))
         self._display_slider.valueChanged.connect(self._call_slider_changed)
+        self._slider_before_label = QtWidgets.QLabel('before')
+
+        self._slider_layout = QtWidgets.QHBoxLayout()
+        self._slider_layout.setContentsMargins(0, 0, 0, 0)
+        self._slider_layout.setSpacing(4)
+        self._slider_layout.addWidget(self._slider_after_label)
+        self._slider_layout.addWidget(self._display_slider)
+        self._slider_layout.addWidget(self._slider_before_label)
 
         self._animation_template_editor = AnimationTemplateEditor(self)
 
@@ -75,8 +94,9 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
 
         self._layout = QtWidgets.QVBoxLayout(self)
         self._layout.setSpacing(4)
-        self._layout.addLayout(self._create_delete_layout)
-        self._layout.addWidget(self._display_slider)
+        self._layout.addLayout(self._create_edit_layout)
+        self._layout.addWidget(self._delete_working_copy_on_mesh_button)
+        self._layout.addLayout(self._slider_layout)
         self._layout.addWidget(self._animation_template_editor)
         self._layout.addLayout(self._animation_template_layout)
         self._layout.addSpacing(4)
@@ -130,11 +150,42 @@ class CorrectiveBlendshapeWindow(QtWidgets.QWidget):
         create_blendshape_corrective_for_selected_working_copys(
             values=self._animation_template_editor.values())
 
+    def _call_edit_target(self):
+        mesh, targets_per_blendshapes = get_targets_list_from_selection()
+        menu = EditTargetMenu(mesh, targets_per_blendshapes, self)
+        menu.exec_(QtGui.QCursor().pos())
+        set_working_copys_transparency(self._display_slider.value() / 100.0)
+
     def _call_set_template_values(self, value):
         self._animation_template_editor.set_values(KEY_TEMPLATES[value])
 
 
+class EditTargetMenu(QtWidgets.QMenu):
+    def __init__(self, mesh, targets_per_blendshapes, parent=None):
+        super(EditTargetMenu, self).__init__(parent)
+        if targets_per_blendshapes is None:
+            action = QtWidgets.QAction('No blendshape available', parent)
+            action.setEnabled(False)
+            self.addAction(action)
+            return
+
+        for blendshape, targets in targets_per_blendshapes:
+            menu = QtWidgets.QMenu(blendshape.name(), self)
+            for index, target in enumerate(targets):
+                action = QtWidgets.QAction(target, parent)
+                action.triggered.connect(
+                    partial(
+                        setup_edit_target_working_copy,
+                        mesh, blendshape, index))
+                menu.addAction(action)
+            self.addMenu(menu)
+
+
 class AnimationTemplateEditor(QtWidgets.QWidget):
+    """
+    this is a simple interactive widget to draw an simple animation curve
+    for the blendshape who will be created
+    """
     def __init__(self, parent=None):
         super(AnimationTemplateEditor, self).__init__(parent)
         self.configure()
