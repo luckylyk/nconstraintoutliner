@@ -40,3 +40,26 @@ def create_dynamic_constraint_maya_scene():
     cmds.select([sphere_1, sphere_2 + ".vtx[381]"])
     dc = DynamicConstraint.create(DynamicConstraint.POINT_TO_SURFACE)
     dc.set_color(0, 125, 125)
+
+
+def create_test_scene_for_corrective_blendshape():
+    cube = cmds.polyCube(
+        subdivisionsDepth=5, subdivisionsHeight=10, subdivisionsWidth=5,
+        name='my_test_cube', height=5, width=2.5, depth=2.5)
+
+    cmds.delete(cube[1])
+    cube = cube[0]
+    cmds.setAttr(cube + '.ty', 2.5)
+
+    cmds.select(clear=True)
+    joints = [
+        cmds.joint(position=(0, 0, 0)),
+        cmds.joint(position=(0, 1.25, 0)),
+        cmds.joint(position=(0, 2.5, 0)),
+        cmds.joint(position=(0, 3.75, 0)),
+        cmds.joint(position=(0, 5, 0))]
+
+    cmds.select([cube] + joints)
+    cmds.skinCluster()
+    cmds.select(joints[1:])
+    cmds.rotate(0, 0, 18, relative=True, objectSpace=True)

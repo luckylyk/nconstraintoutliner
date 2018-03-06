@@ -13,10 +13,10 @@ def generic_method_creating_a_deformer_from_selection():
     return
 These kind of lines pollute all procedures changing, checking selection
 and it can be cleaner to externalize them like this:
-@keep_maya_selection
+@preserve_selection
 @filter_node_type_in_selection(node_type=('transform, mesh'))
 @selection_contains_at_least(2, 'transform')
-@need_maya_selection
+@selection_required
 def generic_method_creating_a_deformer_from_selection():
     # all your process ...
     return
@@ -28,10 +28,7 @@ from functools import wraps
 from maya import cmds
 
 
-__author__ = "lionelb"
-
-
-def keep_maya_selection(func):
+def preserve_selection(func):
     '''
     this decorator save your maya selection before execute the
     decorated function. And reselect it when it's executed. 
@@ -45,7 +42,7 @@ def keep_maya_selection(func):
     return wrapper
 
 
-def need_maya_selection(func):
+def selection_required(func):
     '''
     this decorator check check if node is selected and return a cmds.error
     if nothing is selected

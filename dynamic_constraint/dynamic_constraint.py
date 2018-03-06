@@ -14,7 +14,7 @@ from itertools import cycle
 from maya import cmds, mel
 from maya_libs.selection.context_managers import MayaSelectionManager
 from maya_libs.selection.decorators import (
-    keep_maya_selection, need_maya_selection)
+    preserve_selection, selection_required)
 
 TYPE_ATTR_NAME = 'constraintType'
 TYPE_ATTR_LONGNAME = 'Dynamic Constraint Type'
@@ -104,7 +104,7 @@ class DynamicConstraint(object):
         self._nice_name = None
 
     @staticmethod
-    @need_maya_selection
+    @selection_required
     def create(constraint_type=None):
         '''
         Alternative constructor, creating the node in maya and name it correctly
@@ -165,8 +165,8 @@ class DynamicConstraint(object):
     def type_name(self):
         return DYNAMIC_CONTRAINT_TYPES[self.type]['name']
 
-    @keep_maya_selection
-    @need_maya_selection
+    @preserve_selection
+    @selection_required
     def add_selection_to_members(self):
         cmds.select([self._node] + cmds.ls(sl=True))
         mel.eval('dynamicConstraintMembership "add";')
@@ -185,8 +185,8 @@ class DynamicConstraint(object):
         cmds.select(self._node)
         mel.eval('dynamicConstraintMembership "select";')
 
-    @keep_maya_selection
-    @need_maya_selection
+    @preserve_selection
+    @selection_required
     def remove_selection_to_members(self):
         cmds.select([self._node] + cmds.ls(sl=True))
         mel.eval('dynamicConstraintMembership "remove";')
@@ -268,7 +268,7 @@ def add_and_set_constraint_type_attribute(constraint_shape, constraint_type):
     cmds.setAttr(attribute, constraint_type)
 
 
-@need_maya_selection
+@selection_required
 def create_dynamic_constraint_node(constraint_type):
     """
     this method create an nConstraint and apply the custom enum attribute
@@ -313,7 +313,7 @@ def get_dynamic_constraint_color(constraint_shape):
         return 25, 25, 125
 
 
-@keep_maya_selection
+@preserve_selection
 def get_dynamic_constraint_components(constraint_shape):
     '''
     return the nconstraint components list as list of strings.

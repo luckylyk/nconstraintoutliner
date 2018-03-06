@@ -2,9 +2,9 @@ import pymel.core as pm
 import maya.api.OpenMaya as om2
 
 from maya_libs.selection.decorators import (
-    need_maya_selection, filter_selection, selection_contains_at_least,
+    selection_required, filter_selection, selection_contains_at_least,
     select_shape_transforms, filter_transforms_by_children_types,
-    selection_contains_exactly, keep_maya_selection)
+    selection_contains_exactly, preserve_selection)
 
 
 CORRECTIVE_BLENDSHAPE_NAME = 'corrective_blendshape'
@@ -25,7 +25,7 @@ DISPLAY_MESH_SG = 'TMP_DISPLAY_COPY_LAMBERTSG'
 @select_shape_transforms
 @filter_transforms_by_children_types('mesh')
 @selection_contains_at_least(1, 'transform')
-@need_maya_selection
+@selection_required
 def create_working_copy_on_selection():
     for transform in pm.ls(selection=True):
         if mesh_have_working_copy(transform):
@@ -160,7 +160,7 @@ def setup_edit_target_working_copy(mesh, blendshape, target_index):
 @select_shape_transforms
 @filter_transforms_by_children_types('mesh')
 @selection_contains_at_least(1, 'transform')
-@need_maya_selection
+@selection_required
 def delete_selected_working_copys():
     for mesh_transform in pm.ls(selection=True):
         if not mesh_transform.hasAttr(WORKING_MESH_ATTR):
@@ -244,7 +244,7 @@ def get_corrective_blendshapes(mesh):
 @select_shape_transforms
 @filter_transforms_by_children_types('mesh')
 @selection_contains_at_least(1, 'transform')
-@need_maya_selection
+@selection_required
 def create_blendshape_corrective_for_selected_working_copys(values=None):
     result = []
     for working_copy in pm.ls(selection=True):
@@ -279,7 +279,7 @@ def create_blendshape_corrective_on_mesh(base, target, values=None):
     base.message >> corrective_blendshape.attr(CORRECTIVE_BLENDSHAPE_ATTR)
 
     if values is not None:
-        set_animation_template_on_blendshape_target_weight(
+        apply_animation_template_on_blendshape_target_weight(
             blendshape=corrective_blendshape, target_index=0, values=values)
 
 
@@ -317,7 +317,7 @@ def add_target_on_corrective_blendshape(blendshape, target, base, values=None):
         target=(base, index, target, 1.0))
     pm.blendShape(corrective_blendshape, edit=True, weight=(index, 1.0))
 
-    set_animation_template_on_blendshape_target_weight(
+    apply_animation_template_on_blendshape_target_weight(
         blendshape=corrective_blendshape, target_index=index, values=values)
 
 
@@ -350,10 +350,11 @@ def apply_edit_target_working_copy(working_copy):
 
     blendshape.weight[target_index].set(target_original_value)
 
+
 @filter_selection(type=('mesh', 'transform'), objectsOnly=True)
 @select_shape_transforms
 @selection_contains_at_least(1, 'transform')
-@need_maya_selection
+@selection_required
 def apply_selected_working_copys(values=None):
     result = []
     for worky_copy in pm.ls(selection=True):
@@ -401,6 +402,7 @@ def apply_working_copy(mesh, blendshape=None, values=None):
 def get_targets_list_from_selection():
     original_mesh = pm.ls(selection=True)[0]
     return original_mesh, get_targets_list_from_mesh(original_mesh)
+
 
 def get_targets_list_from_mesh(mesh):
     '''
@@ -452,7 +454,7 @@ def set_target_relative(blendshape, target, base):
     pm.delete(intermediate.getParent())
 
 
-def set_animation_template_on_blendshape_target_weight(
+def apply_animation_template_on_blendshape_target_weight(
         blendshape, target_index, values=None):
     """
     this method will apply an animation on the blendshape target index given.
