@@ -1,4 +1,4 @@
-from .dynamic_constraint import DynamicConstraint
+from maya_libs.dynamic_constraint.dynamic_constraint import DynamicConstraint
 from maya import cmds, mel
 
 

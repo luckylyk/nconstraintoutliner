@@ -112,6 +112,7 @@ def get_component_mesh(component):
 
     return mesh
 
+
 def find_type_in_history(node, nodetype, past=True, future=True):
     if not past and not future:
         return ""
