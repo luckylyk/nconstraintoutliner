@@ -7,6 +7,7 @@ paint components, etc ...
 import os
 import sys
 from PySide2 import QtWidgets, QtCore, QtGui
+from maya_libs.qt.main_window import get_maya_windows
 from .dynamic_constraint import (
     DYNAMIC_CONTRAINT_TYPES, list_dynamic_constraints,
     DynamicConstraint, list_dynamic_constraints_components)
@@ -39,7 +40,7 @@ class DynamicConstraintOutliner(QtWidgets.QWidget):
         self._dynamic_constraint_table_view.set_item_delegate(
             self._dynamic_constraint_item_delegate)
 
-        self._filter_component_label = QtWidgets.QLabel('filter component: ')
+        self._filter_component_label = QtWidgets.QLabel('filter by component:')
         self._filter_component_combobox = QtWidgets.QComboBox()
         self._filter_component_combobox.setFixedWidth(250)
         self._filter_component_combobox.currentIndexChanged.connect(
@@ -122,7 +123,7 @@ class DynamicConstraintOutliner(QtWidgets.QWidget):
             list_dynamic_constraints(types=types, components=components))
 
     def update_dynamic_constraints_components(self):
-        components = ['None'] + list_dynamic_constraints_components()
+        components = ['All'] + list_dynamic_constraints_components()
         current_component = self._filter_component_combobox.currentText()
 
         self._filter_component_combobox.blockSignals(True)
@@ -571,3 +572,9 @@ class DynamicConstraintTableView(QtWidgets.QTableView):
             if index == 2:
                 continue
             self.setItemDelegateForColumn(index, item_delegate)
+
+
+def launch():
+    outliner = DynamicConstraintOutliner(get_maya_windows())
+    outliner.show()
+    return outliner
