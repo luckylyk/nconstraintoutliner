@@ -180,7 +180,6 @@ class DynamicConstraint(object):
 
     def paint_constraint_strength_map_on_components(self):
         component = self.components_iterator.next()
-        print component
         cmds.select([self.nodename, component])
         cmd = (
             'setNComponentMapType("strength", 1);'
@@ -202,7 +201,7 @@ class DynamicConstraint(object):
     def rename_node_from_components(self):
         parent = self.parent
         nice_name = self.nice_name
-        new_node_name = cmds.rename(self.nodename, nice_name + 'Shape')
+        cmds.rename(self.nodename, nice_name + 'Shape')
         cmds.rename(parent, nice_name)
         self._nice_name = None
 
@@ -293,40 +292,24 @@ def create_dynamic_constraint_node(constraint_type):
     return constraint_node[0]
 
 
-
 def find_type_in_history(node, nodetype, past=True, future=True):
+    """
+    return the first node with corresponding nodetype in the specified node
+    history
+    """
     if not past and not future:
         return None
-
-    elif not past or not future:
-        history = cmds.listHistory(node, f=future, bf=True, af=True)
-        objects = cmds.ls(history, type=nodetype)
-        if objects:
-            return objects[0]
-
-    elif past and future:
-        past = cmds.listHistory(node, f=0, bf=True, af=True)
-        future = cmds.listHistory(node, f=1, bf=True, af=True)
-        past_objects = cmds.ls(past, type=nodetype)
-        future_objects = cmds.ls(future, type=nodetype)
-        if past_objects:
-            if not future_objects:
-                return past_objects[0]
-
-            min=max([len(future_objects), len(past_objects)])
-            for index in range(min):
-                if past[index] == past_objects[0]:
-                    return past_objects[0]
-                if future[index] == future_objects[0]:
-                    return future_objects[0]
-
-        elif future_objects:
-            return future_objects[0]
-
+    history = cmds.listHistory(node, f=future, bf=True, af=True)
+    objects = cmds.ls(history, type=nodetype)
+    if objects:
+        return objects[0]
     return None
 
 
-def get_component_mesh(component):
+def get_component_transform(component):
+    """
+    return the first mesh transform found in the ncomponent history
+    """
     nbases = cmds.listConnections(component, type="nBase", sh=1)
     if not nbases:
         return cmds.warning("{} have no nbase".format(component))
@@ -375,13 +358,12 @@ def get_dynamic_constraint_color(constraint_shape):
         return 25, 25, 125
 
 
-@preserve_selection
 def get_dynamic_constraint_components(constraint_shape):
     '''
     return the nconstraint components list as list of strings.
     '''
     components = list(set([
-        get_component_mesh(component) for component in
+        get_component_transform(component) for component in
         cmds.listConnections(constraint_shape, type='nComponent')]))
     return [c for c in components if c]
 
