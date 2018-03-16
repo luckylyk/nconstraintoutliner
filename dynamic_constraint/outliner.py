@@ -419,7 +419,6 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
             return QtCore.QSize(24, 24)
 
     def _generate_icons(self):
-
         if not self.ON_ICON:
             self.ON_ICON = QtGui.QIcon(
                 os.path.join(ICONPATH, 'on.png'))
@@ -499,7 +498,7 @@ class DynamicConstraintTableModel(QtCore.QAbstractTableModel):
             if dynamic_constraint.is_well_named:
                 return QtGui.QPalette().color(QtGui.QPalette.WindowText)
             else:
-                return QtGui.QColor('red')
+                return QtGui.QColor('grey')
 
         if role == QtCore.Qt.ToolTipRole:
             return self.TOOLTIPS[col]

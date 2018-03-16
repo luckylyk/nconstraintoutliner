@@ -144,7 +144,15 @@ class DynamicConstraint(object):
 
     @property
     def is_well_named(self):
-        return self.parent == self.nice_name
+        #  this loop remove digit at the end of the parent name to compare
+        #  with the canonic nice name
+        n = 0
+        for letter in self.parent[::-1]:  # magic trick to reverse string
+            if letter.isdigit():
+                n += 1
+            else:
+                break
+        return self.parent[:-n] if n else self.parent == self.nice_name
 
     @property
     def nice_name(self):
@@ -199,10 +207,7 @@ class DynamicConstraint(object):
         self._components_iterator = None
 
     def rename_node_from_components(self):
-        parent = self.parent
-        nice_name = self.nice_name
-        cmds.rename(self.nodename, nice_name + 'Shape')
-        cmds.rename(parent, nice_name)
+        cmds.rename(self.parent, self.nice_name)
         self._nice_name = None
 
     def select(self, add=True):
@@ -321,7 +326,7 @@ def get_component_transform(component):
         nbases[0], nodetype="mesh", future=True, past=False)
     shape_visible = all([
         cmds.getAttr(mesh + ".visibility"),
-        cmds.getAttr(mesh + ".intermediateObject")])
+        cmds.getAttr(mesh + ".intermediateObject")]) if mesh else False
 
     if not mesh or not shape_visible:
         mesh = find_type_in_history(
