@@ -463,9 +463,11 @@ def set_animation_template_on_blendshape_target_weight(
         return
 
     blendshape = pm.PyNode(blendshape)
-    frames = range(int(pm.env.time - 5), int(pm.env.time + 6))
+    frames = range(int(pm.env.time) - 5, int(pm.env.time) + 6)
+    decimal = pm.env.time - int(pm.env.time)
     frames_values = {
-        f: values[i] for i, f in enumerate(frames) if values[i] is not None}
+        f + decimal: values[i] for i, f in enumerate(frames)
+        if values[i] is not None}
 
     for frame, value in frames_values.iteritems():
         pm.setKeyframe(
@@ -475,7 +477,7 @@ def set_animation_template_on_blendshape_target_weight(
     # this force maya to refresh the current frame in evaluation
     # without those lines, maya does'nt refresh the current frame if a
     # key is set at this timing.
-    if frames_values[pm.env.time] is not None:
+    if frames_values.get(pm.env.time) is not None:
         pm.blendShape(
             blendshape, edit=True,
             weight=(target_index, frames_values[pm.env.time]))
