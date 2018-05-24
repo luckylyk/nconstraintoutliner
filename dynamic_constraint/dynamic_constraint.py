@@ -12,9 +12,13 @@ import os
 from itertools import cycle
 
 from maya import cmds, mel
+import maya.api.OpenMaya as om2
+
 from maya_libs.selection.context_managers import MayaSelectionManager
 from maya_libs.selection.decorators import (
-    keep_maya_selection, need_maya_selection)
+    preserve_selection, selection_required)
+
+from .component import get_dynamic_constraint_members
 
 TYPE_ATTR_NAME = 'constraintType'
 TYPE_ATTR_LONGNAME = 'Dynamic Constraint Type'
@@ -45,28 +49,24 @@ DYNAMIC_CONTRAINT_TYPES = [
         'short': 'PTS',
         'preset_file': 'point_to_surface.json'
     },
-
     {
         'name': 'slide on surface',
         'type': 'slideOnSurface',
         'short': 'SOS',
         'preset_file': 'slide_on_surface.json'
     },
-
     {
         'name': 'weld',
         'type': 'weldBorders',
         'short': 'WLD',
         'preset_file': 'weld_adjacent_border.json'
     },
-
     {
         'name': 'exclude collide',
         'type': 'collisionExclusion',
         'short': 'EXC',
         'preset_file': 'exclude_collider_pairs.json'
     },
-
     {
         'name': 'disable collision',
         'type': 'disableCollision',
@@ -95,8 +95,9 @@ class DynamicConstraint(object):
     EXCLUDE_COLLIDE = 6
     DISABLE_COLLIDE = 7
 
-    def __init__(self, nodename=None):
-        self._node = nodename
+    def __init__(self, nodename):
+        self._dagnode = om2.MFnDagNode(
+            om2.MSelectionList().add(nodename).getDependNode(0))
         self._components = None
         self._components_iterator = None
         self._members = None
@@ -104,7 +105,7 @@ class DynamicConstraint(object):
         self._nice_name = None
 
     @staticmethod
-    @need_maya_selection
+    @selection_required
     def create(constraint_type=None):
         '''
         Alternative constructor, creating the node in maya and name it correctly
@@ -117,7 +118,7 @@ class DynamicConstraint(object):
 
     @property
     def color(self):
-        return get_dynamic_constraint_color(self._node)
+        return get_dynamic_constraint_color(self.nodename)
 
     @property
     def components_iterator(self):
@@ -129,83 +130,91 @@ class DynamicConstraint(object):
     def components(self):
         ''' return objects members parent's '''
         if self._components is None:
-            self._components = get_dynamic_constraint_components(self._node)
+            self._components = get_dynamic_constraint_components(self.nodename)
             self._components_iterator = None
         return self._components
 
     @property
+    def nodename(self):
+        return self._dagnode.name()
+
+    @property
     def enable(self):
-        return cmds.getAttr(self._node + '.enable')
+        return cmds.getAttr(self.nodename + '.enable')
 
     @property
     def is_well_named(self):
-        return self.parent == self.nice_name
+        #  this loop remove digit at the end of the parent name to compare
+        #  with the canonic nice name
+        n = 0
+        for letter in self.parent[::-1]:  # magic trick to reverse string
+            if letter.isdigit():
+                n += 1
+            else:
+                break
+        return self.parent[:-n] if n else self.parent == self.nice_name
 
     @property
     def nice_name(self):
         if self._nice_name is None:
-            self._nice_name = get_dynamic_constraint_nice_name(self._node)
+            self._nice_name = get_dynamic_constraint_nice_name(self.nodename)
         return self._nice_name
 
     @property
     def node(self):
-        return self._node
+        return self.nodename
 
     @property
     def parent(self):
-        return cmds.listRelatives(self._node, parent=True)[0]
+        return cmds.listRelatives(self.nodename, parent=True)[0]
 
     @property
     def type(self):
         if self._type is None:
-            self._type = get_constraint_type(self._node)
+            self._type = get_constraint_type(self.nodename)
         return self._type
 
     @property
     def type_name(self):
         return DYNAMIC_CONTRAINT_TYPES[self.type]['name']
 
-    @keep_maya_selection
-    @need_maya_selection
+    @preserve_selection
+    @selection_required
     def add_selection_to_members(self):
-        cmds.select([self._node] + cmds.ls(sl=True))
+        cmds.select([self.nodename] + cmds.ls(sl=True))
         mel.eval('dynamicConstraintMembership "add";')
         self._components = None
         self._components_iterator = None
 
     def paint_constraint_strength_map_on_components(self):
         component = self.components_iterator.next()
-        cmds.select([self._node, component])
+        cmds.select([self.nodename, component])
         cmd = (
             'setNComponentMapType("strength", 1);'
             'artAttrNComponentToolScript 4 strength;')
         mel.eval(cmd)
 
     def select_members(self):
-        cmds.select(self._node)
+        cmds.select(self.nodename)
         mel.eval('dynamicConstraintMembership "select";')
 
-    @keep_maya_selection
-    @need_maya_selection
+    @preserve_selection
+    @selection_required
     def remove_selection_to_members(self):
-        cmds.select([self._node] + cmds.ls(sl=True))
+        cmds.select([self.nodename] + cmds.ls(sl=True))
         mel.eval('dynamicConstraintMembership "remove";')
         self._components = None
         self._components_iterator = None
 
     def rename_node_from_components(self):
-        parent = self.parent
-        nice_name = self.nice_name
-        new_node_name = cmds.rename(self._node, nice_name + 'Shape')
-        cmds.rename(parent, nice_name)
-        self._node = new_node_name
+        cmds.rename(self.parent, self.nice_name)
         self._nice_name = None
 
     def select(self, add=True):
-        cmds.select(self._node)
+        cmds.select(self.nodename)
 
     def set_color(self, r, g, b):
-        set_dynamic_constraint_color(self._node, r, g ,b)
+        set_dynamic_constraint_color(self.nodename, r, g ,b)
 
     def set_color_from_dialogbox(self):
         cmds.colorEditor(rgb=[c / 255.0 for c in self.color])
@@ -216,7 +225,7 @@ class DynamicConstraint(object):
         self.set_color(r, g, b)
 
     def set_type(self, constraint_type):
-        attribute = self._node + '.' + TYPE_ATTR_NAME
+        attribute = self.nodename + '.' + TYPE_ATTR_NAME
         old_type = self.type
         cmds.setAttr(attribute, constraint_type)
         self._type = constraint_type
@@ -224,10 +233,10 @@ class DynamicConstraint(object):
         # to avoid a change from a tweaked constraint done with the maya tools
         if old_type == DynamicConstraint.UNDEFINED:
             return
-        apply_presets_on_dynamic_constraint(self._node, constraint_type)
+        apply_presets_on_dynamic_constraint(self.nodename, constraint_type)
 
     def switch(self):
-        cmds.setAttr(self._node + '.enable', not self.enable)
+        cmds.setAttr(self.nodename + '.enable', not self.enable)
         return self.enable
 
 
@@ -268,7 +277,7 @@ def add_and_set_constraint_type_attribute(constraint_shape, constraint_type):
     cmds.setAttr(attribute, constraint_type)
 
 
-@need_maya_selection
+@selection_required
 def create_dynamic_constraint_node(constraint_type):
     """
     this method create an nConstraint and apply the custom enum attribute
@@ -286,6 +295,47 @@ def create_dynamic_constraint_node(constraint_type):
         return
     add_and_set_constraint_type_attribute(constraint_node[0], constraint_type)
     return constraint_node[0]
+
+
+def find_type_in_history(node, nodetype, past=True, future=True):
+    """
+    return the first node with corresponding nodetype in the specified node
+    history
+    """
+    if not past and not future:
+        return None
+    history = cmds.listHistory(node, f=future, bf=True, af=True)
+    objects = cmds.ls(history, type=nodetype)
+    if objects:
+        return objects[0]
+    return None
+
+
+def get_component_transform(component):
+    """
+    return the first mesh transform found in the ncomponent history
+    """
+    nbases = cmds.listConnections(component, type="nBase", sh=1)
+    if not nbases:
+        return cmds.warning("{} have no nbase".format(component))
+
+    if cmds.nodeType(nbases[0]) == "nParticle":
+        return nbases[0]
+
+    mesh = find_type_in_history(
+        nbases[0], nodetype="mesh", future=True, past=False)
+    shape_visible = all([
+        cmds.getAttr(mesh + ".visibility"),
+        cmds.getAttr(mesh + ".intermediateObject")]) if mesh else False
+
+    if not mesh or not shape_visible:
+        mesh = find_type_in_history(
+            nbases[0], nodetype="mesh", future=False, past=True)
+
+    if not mesh:
+        return cmds.warning("No visible mesh found")
+
+    return cmds.listRelatives(mesh, parent=True)[0]
 
 
 def get_dynamic_constraint_color(constraint_shape):
@@ -313,19 +363,14 @@ def get_dynamic_constraint_color(constraint_shape):
         return 25, 25, 125
 
 
-@keep_maya_selection
 def get_dynamic_constraint_components(constraint_shape):
     '''
     return the nconstraint components list as list of strings.
     '''
-    cmds.select(constraint_shape)
-    try:  # this maya command can crash if it can't find any component
-        mel.eval('dynamicConstraintMembership "select";')
-    except:
-        return []
-    components = cmds.ls(selection=True, objectsOnly=True)
-    components = [n for c in components for n in cmds.listRelatives(c, p=True)]
-    return components
+    components = list(set([
+        get_component_transform(component) for component in
+        cmds.listConnections(constraint_shape, type='nComponent')]))
+    return [c for c in components if c]
 
 
 def get_dynamic_constraint_nice_name(constraint_shape):
