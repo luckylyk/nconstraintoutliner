@@ -67,7 +67,7 @@ def create_version(
         name=None, comment=None, nodes=None, start_frame=0, end_frame=0)
 
     with open(path, 'w') as version_file:
-        json.dump(version_file, infos)
+        json.dump(version_file, infos, indent=2, sort_keys=True)
 
 
 def connect_version(version, nodes=None):
@@ -79,3 +79,7 @@ def connect_version(version, nodes=None):
                     attachFile=True,
                     fileName=os.path.basename(mcx_file),
                     directory=os.path.dirname(mcx_file))
+
+
+def list_nodes_in_versions(versions):
+    return list(set([version.infos['nodes'] for version in versions]))
