@@ -2,6 +2,26 @@
 from maya import cmds, mel
 
 
+def list_connected_cachenodes(nodes=None):
+    '''
+    :nodes: one or list of dyna,ic nodes as string ('hairSystem' and 'nCloth')
+    '''
+    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
+    cachenodes = cmds.listConnections(nodes, type='cacheFile')
+    if cachenodes:
+        return list(set(cachenodes))
+
+
+def list_connected_blendnodes(nodes=None):
+    '''
+    :nodes: one or list of dyna,ic nodes as string ('hairSystem' and 'nCloth')
+    '''
+    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
+    blendnodes = cmds.listConnections(nodes, type='cacheBlend')
+    if blendnodes:
+        return list(set(blendnodes))
+
+
 def disconnect_cachenodes(nodes=None):
     '''
     This method disconnect all cache node and return all connections
@@ -33,25 +53,44 @@ def disconnect_cachenodes(nodes=None):
     return connections
 
 
-def list_connected_cachenodes(nodes=None, nodetype='cacheFile'):
-    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
-    cachenodes = cmds.listConnections(nodes, type=nodetype)
-    if cachenodes:
-        return list(set(cachenodes))
-
-
-def list_connected_blendnodes(nodes=None):
-    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
-    blendnodes = cmds.listConnections(nodes, type='cacheBlend')
-    if blendnodes:
-        return list(set(blendnodes))
-
-
 def reconnect_cachenodes(connections, nodetypes=None):
     nodetypes = list(nodetypes) if nodetypes else ('cacheFile', 'cacheBlend')
     for attribute, connected in connections.iteritems():
         if cmds.nodeType(attribute) in nodetypes and cmds.objExists(attribute):
             cmds.connectAttr(attribute, connected)
+
+
+def find_free_cachedata_channel_index(cacheblend):
+    i = 0
+    while cmds.listConnections(cacheblend + '.cacheData[{}].start'.format(i)):
+        i += 1
+    return i
+
+
+def connect_attributes(outnode, innode, connections):
+    """ Connect a series of attribute from two nodes
+    """
+    for out_attribute, in_attribute in connections.iteritems():
+        cmds.connectAttr(
+            '{}.{}'.format(outnode, out_attribute),
+            '{}.{}'.format(innode, in_attribute))
+
+
+def attach_cachefile_to_cacheblend(cachefile, cacheblend):
+    i = find_free_cachedata_channel_index(cacheblend)
+    connections = {
+        'end': 'cacheData[{}].end'.format(i),
+        'inRange': 'cacheData[{}].range'.format(i),
+        'start': 'cacheData[{}].start'.format(i),
+        'outCacheData[0]': 'inCache[0].vectorArray[{}]'.format(i)}
+    connect_attributes(cachefile, cacheblend, connections)
+
+
+def attach_cachenode(cachenode, node):
+    connections = {
+        'outCacheData[0]': 'positions',
+        'inRange': 'playFromCache'}
+    connect_attributes(cachenode, node, connections)
 
 
 def record_ncache(
@@ -72,9 +111,9 @@ def record_ncache(
         cmds.delete(list_connected_blendnodes(nodes))
     elif behavior is 1:
         cmds.delete(list_connected_cachenodes(nodes))
-        attributes = disconnect_cachenodes(nodes)
+        connections = disconnect_cachenodes(nodes)
     elif behavior is 2:
-        attributes = disconnect_cachenodes(nodes)
+        connections = disconnect_cachenodes(nodes)
 
     cmds.select(nodes)
     command = (
