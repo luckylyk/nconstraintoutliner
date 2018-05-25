@@ -2,7 +2,7 @@
 from maya import cmds, mel
 
 
-def list_connected_cachenodes(nodes=None):
+def list_connected_cachefiles(nodes=None):
     '''
     :nodes: one or list of dyna,ic nodes as string ('hairSystem' and 'nCloth')
     '''
@@ -12,7 +12,7 @@ def list_connected_cachenodes(nodes=None):
         return list(set(cachenodes))
 
 
-def list_connected_blendnodes(nodes=None):
+def list_connected_cacheblends(nodes=None):
     '''
     :nodes: one or list of dyna,ic nodes as string ('hairSystem' and 'nCloth')
     '''
@@ -22,15 +22,29 @@ def list_connected_blendnodes(nodes=None):
         return list(set(blendnodes))
 
 
+def get_connected_cachenode(node):
+    assert cmds.nodeType(node) in ('nCloth', 'hairSystem')
+    cachenodes = (
+        (list_connected_cachefiles('nClothShape2') or []) +
+        (list_connected_cacheblends('nClothShape2') or []))
+
+    if not cachenodes:
+        return
+    elif len(cachenodes) > 1:
+        raise ValueError(
+            "More than 1 cache node is connected to {}".format(node))
+    return cachenodes[0]
+
+
 def disconnect_cachenodes(nodes=None):
     '''
-    This method disconnect all cache node and return all connections
-    disconnected as dict.
-    :nodes: one or list of dyna,ic nodes as string ('hairSystem' and 'nCloth')
+    This method disconnect all cache node and return all connected nodes
+    as dict.
+    :nodes: one or list of dynamic nodes as string ('hairSystem' and 'nCloth')
     '''
     cachenodes = (
-        list_connected_cachenodes(nodes) or [] +
-        list_connected_blendnodes(nodes) or [])
+        (list_connected_cachefiles(nodes) or []) +
+        (list_connected_cacheblends(nodes) or []))
     attributes = "inRange", "outCacheData"
 
     # retrieve connections and check the cachenodes setup
@@ -40,24 +54,35 @@ def disconnect_cachenodes(nodes=None):
             for attribute in attributes:
                 inplug, outplug = cmds.listConnections(
                     cachenode + "." + attribute, plugs=True, connections=True)
-                connections[inplug] = outplug
+                connections[inplug.split(".")[0]] = outplug.split(".")[0]
+                cmds.disconnectAttr(inplug, outplug)
     except ValueError:
         raise ValueError(
             'A cacheBlend or a cacheFile node have multiple connections.\n'
             'This is not supported by the cache manager.\n'
             'Please remove them before to continue.')
 
-    for inplug, outplug in connections.iteritems():
-         cmds.disconnectAttr(inplug, outplug)
-
     return connections
 
 
 def reconnect_cachenodes(connections, nodetypes=None):
-    nodetypes = list(nodetypes) if nodetypes else ('cacheFile', 'cacheBlend')
-    for attribute, connected in connections.iteritems():
-        if cmds.nodeType(attribute) in nodetypes and cmds.objExists(attribute):
-            cmds.connectAttr(attribute, connected)
+    for cachenode, node in connections.iteritems():
+        cachefile = get_connected_cachenode(node)
+        if not cachefile:
+            attach_cachenode(cachenode, node)
+            continue
+
+        assert cmds.nodeType(cachefile) == 'cacheFile'
+        if cmds.nodeType(cachenode) == 'cacheBlend':
+            attach_cachefile_to_cacheblend(cachefile, cachenode)
+            disconnect_cachenodes(node)
+            attach_cachenode(cachenode, node)
+
+        elif cmds.nodeType(cachenode) == 'cacheFile':
+            cacheblend = cmds.createNode('cacheBlend')
+            attach_cachefile_to_cacheblend(cachefile, cacheblend)
+            disconnect_cachenodes(node)
+            attach_cachenode(cacheblend, node)
 
 
 def find_free_cachedata_channel_index(cacheblend):
@@ -68,7 +93,8 @@ def find_free_cachedata_channel_index(cacheblend):
 
 
 def connect_attributes(outnode, innode, connections):
-    """ Connect a series of attribute from two nodes
+    """
+    Connect a series of attribute from two nodes
     """
     for out_attribute, in_attribute in connections.iteritems():
         cmds.connectAttr(
@@ -107,10 +133,10 @@ def record_ncache(
     output = output or ''
 
     if behavior is 0:
-        cmds.delete(list_connected_cachenodes(nodes))
-        cmds.delete(list_connected_blendnodes(nodes))
+        cmds.delete(list_connected_cachefiles(nodes))
+        cmds.delete(list_connected_cacheblends(nodes))
     elif behavior is 1:
-        cmds.delete(list_connected_cachenodes(nodes))
+        cmds.delete(list_connected_cachefiles(nodes))
         connections = disconnect_cachenodes(nodes)
     elif behavior is 2:
         connections = disconnect_cachenodes(nodes)
@@ -123,7 +149,10 @@ def record_ncache(
             start_frame=start_frame,
             end_frame=end_frame,
             output=output)
-
-
+    print command
     cache_nodes = mel.eval(command)
+
+    if behavior:
+        reconnect_cachenodes(connections)
+
     return cache_nodes
