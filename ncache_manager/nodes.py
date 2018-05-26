@@ -1,3 +1,7 @@
+"""
+This module contains the Node models for cache manager ui
+"""
+
 from maya import cmds
 import maya.api.OpenMaya as om2
 
