@@ -1,122 +1,24 @@
+"""
+This module is a collection of methods changing the automatic cache connection
+system provided by maya. It's wrap aronud the mel command: doCreateNclothCache
 
+By default maya allow the possibility to write cache for different node in a
+single file. But this case is a nightmare to manage. So the manager force
+a ncache with the flag : oneFilePerGeometry.
+That's where the complexity start, cause maya doesn't allow this flag if a
+cache is already connected in a dynamic node.
+That's why this module is modifying the doCreateNclothCache behaviour.
+The main module method is record_ncache. For more informations, refere to his
+docstring.
+
+The module respect a nomenclature:
+    nodes = are maya dynamics nodes as string (type: 'nCloth', 'hairSystem')
+    cacheblend = represent maya 'cacheBlend' node
+    cachefile = represent maya 'cacheFile' node
+    cachenodes = represent maya 'cacheFile' and 'cacheBlend' nodes
+
+"""
 from maya import cmds, mel
-
-
-def list_connected_cachefiles(nodes=None):
-    '''
-    :nodes: one or list of dyna,ic nodes as string ('hairSystem' and 'nCloth')
-    '''
-    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
-    cachenodes = cmds.listConnections(nodes, type='cacheFile')
-    if cachenodes:
-        return list(set(cachenodes))
-
-
-def list_connected_cacheblends(nodes=None):
-    '''
-    :nodes: one or list of dyna,ic nodes as string ('hairSystem' and 'nCloth')
-    '''
-    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
-    blendnodes = cmds.listConnections(nodes, type='cacheBlend')
-    if blendnodes:
-        return list(set(blendnodes))
-
-
-def get_connected_cachenode(node):
-    assert cmds.nodeType(node) in ('nCloth', 'hairSystem')
-    cachenodes = (
-        (list_connected_cachefiles('nClothShape2') or []) +
-        (list_connected_cacheblends('nClothShape2') or []))
-
-    if not cachenodes:
-        return
-    elif len(cachenodes) > 1:
-        raise ValueError(
-            "More than 1 cache node is connected to {}".format(node))
-    return cachenodes[0]
-
-
-def disconnect_cachenodes(nodes=None):
-    '''
-    This method disconnect all cache node and return all connected nodes
-    as dict.
-    :nodes: one or list of dynamic nodes as string ('hairSystem' and 'nCloth')
-    '''
-    cachenodes = (
-        (list_connected_cachefiles(nodes) or []) +
-        (list_connected_cacheblends(nodes) or []))
-    attributes = "inRange", "outCacheData"
-
-    # retrieve connections and check the cachenodes setup
-    try:
-        connections = {}
-        for cachenode in cachenodes:
-            for attribute in attributes:
-                inplug, outplug = cmds.listConnections(
-                    cachenode + "." + attribute, plugs=True, connections=True)
-                connections[inplug.split(".")[0]] = outplug.split(".")[0]
-                cmds.disconnectAttr(inplug, outplug)
-    except ValueError:
-        raise ValueError(
-            'A cacheBlend or a cacheFile node have multiple connections.\n'
-            'This is not supported by the cache manager.\n'
-            'Please remove them before to continue.')
-
-    return connections
-
-
-def reconnect_cachenodes(connections, nodetypes=None):
-    for cachenode, node in connections.iteritems():
-        cachefile = get_connected_cachenode(node)
-        if not cachefile:
-            attach_cachenode(cachenode, node)
-            continue
-
-        assert cmds.nodeType(cachefile) == 'cacheFile'
-        if cmds.nodeType(cachenode) == 'cacheBlend':
-            attach_cachefile_to_cacheblend(cachefile, cachenode)
-            disconnect_cachenodes(node)
-            attach_cachenode(cachenode, node)
-
-        elif cmds.nodeType(cachenode) == 'cacheFile':
-            cacheblend = cmds.createNode('cacheBlend')
-            attach_cachefile_to_cacheblend(cachefile, cacheblend)
-            disconnect_cachenodes(node)
-            attach_cachenode(cacheblend, node)
-
-
-def find_free_cachedata_channel_index(cacheblend):
-    i = 0
-    while cmds.listConnections(cacheblend + '.cacheData[{}].start'.format(i)):
-        i += 1
-    return i
-
-
-def connect_attributes(outnode, innode, connections):
-    """
-    Connect a series of attribute from two nodes
-    """
-    for out_attribute, in_attribute in connections.iteritems():
-        cmds.connectAttr(
-            '{}.{}'.format(outnode, out_attribute),
-            '{}.{}'.format(innode, in_attribute))
-
-
-def attach_cachefile_to_cacheblend(cachefile, cacheblend):
-    i = find_free_cachedata_channel_index(cacheblend)
-    connections = {
-        'end': 'cacheData[{}].end'.format(i),
-        'inRange': 'cacheData[{}].range'.format(i),
-        'start': 'cacheData[{}].start'.format(i),
-        'outCacheData[0]': 'inCache[0].vectorArray[{}]'.format(i)}
-    connect_attributes(cachefile, cacheblend, connections)
-
-
-def attach_cachenode(cachenode, node):
-    connections = {
-        'outCacheData[0]': 'positions',
-        'inRange': 'playFromCache'}
-    connect_attributes(cachenode, node, connections)
 
 
 def record_ncache(
@@ -124,6 +26,8 @@ def record_ncache(
     '''
     this method is a wrap around the mel command doCreateNclothCache
     it force an cache with one cache per geometry (containing all frame).
+    :nodes: one or list of dynamic nodes as string ('hairSystem' and 'nCloth')
+    :output: output folder (not without filename)
     :behavior: as int
         0: replace all old connected cachenodes and blendnodes
         1: replace all old connected cachenodes but add new cache in blendnodes
@@ -149,10 +53,145 @@ def record_ncache(
             start_frame=start_frame,
             end_frame=end_frame,
             output=output)
-    print command
     cache_nodes = mel.eval(command)
 
     if behavior:
         reconnect_cachenodes(connections)
 
     return cache_nodes
+
+
+def list_connected_cachefiles(nodes=None):
+    '''
+    :nodes: one or list of dynamic nodes as string ('hairSystem' and 'nCloth')
+    '''
+    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
+    cachenodes = cmds.listConnections(nodes, type='cacheFile')
+    if cachenodes:
+        return list(set(cachenodes))
+
+
+def list_connected_cacheblends(nodes=None):
+    '''
+    :nodes: one or list of dyna,ic nodes as string ('hairSystem' and 'nCloth')
+    '''
+    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
+    blendnodes = cmds.listConnections(nodes, type='cacheBlend')
+    if blendnodes:
+        return list(set(blendnodes))
+
+
+def get_connected_cachenode(node):
+    assert cmds.nodeType(node) in ('nCloth', 'hairSystem')
+    cachenodes = (
+        (list_connected_cachefiles(node) or []) +
+        (list_connected_cacheblends(node) or []))
+
+    if not cachenodes:
+        return
+    elif len(cachenodes) > 1:
+        raise ValueError(
+            "More than 1 cache node is connected to {}".format(node))
+    return cachenodes[0]
+
+
+def disconnect_cachenodes(nodes=None):
+    '''
+    This method disconnect all cache node and return all connected nodes
+    as dict.
+    :nodes: one or list of dynamic nodes as string ('hairSystem' and 'nCloth')
+    '''
+    if isinstance(nodes, (str, unicode)):
+        nodes = [nodes]
+    attributes = "playFromCache", "positions"
+    connections = {}
+    for node in nodes:
+        for attribute in attributes:
+            attribute_connections = cmds.listConnections(
+                node + "." + attribute, plugs=True, connections=True)
+            if not attribute_connections:
+                continue
+            inplug, outplug = attribute_connections
+            cmds.disconnectAttr(outplug, inplug)
+            # retrieve node connected
+            connections[outplug.split(".")[0]] = inplug.split(".")[0]
+
+    return connections
+
+
+def reconnect_cachenodes(connections, nodetypes=None):
+    '''
+    this method reconnect the cache receveiving a dict with the connections
+    setup before the cache.
+    '''
+    for cachenode, node in connections.iteritems():
+        cachefile = get_connected_cachenode(node)
+        if not cachefile:
+            attach_cachenode(cachenode, node)
+            continue
+
+        cf_type = cmds.nodeType(cachefile)
+        assert cf_type == 'cacheFile', '{} not cacheFile'.format(cachefile)
+
+        if cmds.nodeType(cachenode) == 'cacheBlend':
+            attach_cachefile_to_cacheblend(cachefile, cachenode)
+            disconnect_cachenodes(node)
+            attach_cachenode(cachenode, node)
+
+        elif cmds.nodeType(cachenode) == 'cacheFile':
+            cacheblend = cmds.createNode('cacheBlend')
+            attach_cachefile_to_cacheblend(cachefile, cacheblend)
+            attach_cachefile_to_cacheblend(cachenode, cacheblend)
+            disconnect_cachenodes(node)
+            attach_cachenode(cacheblend, node)
+
+
+def find_free_cachedata_channel_index(cacheblend):
+    i = 0
+    while cmds.listConnections(cacheblend + '.cacheData[{}].start'.format(i)):
+        i += 1
+    return i
+
+
+def connect_attributes(outnode, innode, connections):
+    '''
+    Connect a series of attribute from two nodes
+    '''
+    for out_attribute, in_attribute in connections.iteritems():
+        cmds.connectAttr(
+            '{}.{}'.format(outnode, out_attribute),
+            '{}.{}'.format(innode, in_attribute))
+
+
+def attach_cachefile_to_cacheblend(cachefile, cacheblend):
+    i = find_free_cachedata_channel_index(cacheblend)
+    connections = {
+        'end': 'cacheData[{}].end'.format(i),
+        'inRange': 'cacheData[{}].range'.format(i),
+        'start': 'cacheData[{}].start'.format(i),
+        'outCacheData[0]': 'inCache[0].vectorArray[{}]'.format(i)}
+    connect_attributes(cachefile, cacheblend, connections)
+
+
+def attach_cachenode(cachenode, node):
+    connections = {
+        'outCacheData[0]': 'positions',
+        'inRange': 'playFromCache'}
+    connect_attributes(cachenode, node, connections)
+
+
+def clear_cachenodes(nodes=None):
+    if nodes:
+        cachenodes = (
+            (list_connected_cachefiles(nodes) or []) +
+            (list_connected_cacheblends(nodes) or []))
+    else:
+        cachenodes = cmds.ls(type=('cacheFile', 'cacheBlend'))
+    cmds.delete(cachenodes)
+
+
+if __name__ == "__main__":
+    record_ncache(
+        nodes=None, start_frame=0, end_frame=100,
+        output="C:/test/chrfx", behavior=2)
+
