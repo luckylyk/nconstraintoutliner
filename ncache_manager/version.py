@@ -42,8 +42,11 @@ class CacheVersion(object):
             os.path.join(self.path, f) for f in os.listdir(self.path)
             if f.endswith('.xml')]
 
+    def set_range(self):
+        pass
 
-def list_available_version_paths(workspace):
+
+def list_available_cacheversion_paths(workspace):
     versions = [
         os.path.join(workspace, folder)
         for folder in os.listdir(os.path.join(workspace))
@@ -51,28 +54,29 @@ def list_available_version_paths(workspace):
     return sorted(versions, key=lambda x: os.stat(x).st_ctime)
 
 
-def list_available_versions(workspace):
-    return [CacheVersion(p) for p in list_available_version_paths(workspace)]
+def list_available_cacheversions(workspace):
+    return [
+        CacheVersion(p) for p in list_available_cacheversion_paths(workspace)]
 
 
-def get_new_version_path(workspace):
+def get_new_cacheversion_path(workspace):
     increment = 0
-    version_path = os.path.join(
-        workspace, VERSION_FOLDERNAME + str(increment).zfill(3))
+    cacheversion_path = os.path.join(
+        workspace, VERSION_FOLDERNAME.format(str(increment).zfill(3)))
 
-    while os.path.exists(version_path):
+    while os.path.exists(cacheversion_path):
         increment += 1
-        version_path = os.path.join(
-            workspace, VERSION_FOLDERNAME + str(increment).zfill(3))
+        cacheversion_path = os.path.join(
+            workspace, VERSION_FOLDERNAME.format(str(increment).zfill(3)))
 
-    return version_path
+    return cacheversion_path
 
 
-def create_version(
+def create_cacheversion(
         workspace=None, name=None, comment=None, nodes=None,
         start_frame=0, end_frame=0):
 
-    directory = get_new_version_path(workspace)
+    directory = get_new_cacheversion_path(workspace)
     os.makedirs(directory)
     infos = dict(
         name=None, comment=None, nodes=None, start_frame=0, end_frame=0)
@@ -80,6 +84,21 @@ def create_version(
     with open(infos_filepath, 'w') as infos_file:
         json.dump(infos_file, infos, indent=2, sort_keys=True)
 
+    return CacheVersion(directory)
 
-def list_nodes_in_versions(versions):
+
+def list_nodes_in_cacheversions(versions):
     return list(set([version.infos['nodes'] for version in versions]))
+
+
+if __name__ == "__main__":
+    workspace = 'c:/test/cache/'
+    cacheversion = create_cacheversion(
+        workspace=workspace,
+        name="Cache",
+        comment="salut",
+        nodes=['truc'],
+        start_frame=1.0,
+        end_frame=150.0)
+
+    cacheversion.set_range(1.0, 100.0)
