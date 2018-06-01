@@ -62,7 +62,9 @@ def record_ncache(
 
 
 def import_cachefile(node, filename, behavior=0):
-    """ WIP --- MAKE IT WORKS """
+    """
+    WRITE DOCSTRING
+    """
 
     connected_cachenode = get_connected_cachenode([node])
     if behavior is 0:
@@ -70,7 +72,7 @@ def import_cachefile(node, filename, behavior=0):
     if behavior is 1:
         if cmds.nodeType(connected_cachenode) == "cacheFile":
             cmds.delete(connected_cachenode)
-    connections = disconnect_cachenodes(connected_cachenode)
+    connections = disconnect_cachenodes(node)
 
     def convert_channelname_to_inattr(channelname):
         plug = "_".join(channelname.split("_")[:-1])
@@ -148,10 +150,9 @@ def get_connected_cachenode(node):
 def get_connected_dynamicnodes(cachenode):
     connected_dynamicnodes = []
     for nodetype in ('nCloth', 'hairSystem'):
-        nodes = list(set(
-            cmds.listConnections(cachenode, source=False, type=nodetype)))
+        nodes = cmds.listConnections(cachenode, shapes=True, source=False, type=nodetype)
         if nodes:
-            connected_dynamicnodes += nodes
+            connected_dynamicnodes += list(set(nodes))
     return connected_dynamicnodes
 
 
@@ -250,6 +251,8 @@ def clear_cachenodes(nodes=None):
 
 
 if __name__ == "__main__":
+    #import_cachefile(r"hairSyst_emShape1", r"C:\test\chrfx\hairSyst_emShape1.mcx", behavior=2)
+    #connections = disconnect_cachenodes("hairSyst_emShape1Cache1")
     record_ncache(
         nodes=None, start_frame=0, end_frame=100,
         output="C:/test/chrfx", behavior=2)
