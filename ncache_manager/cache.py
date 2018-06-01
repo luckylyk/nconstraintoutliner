@@ -61,6 +61,56 @@ def record_ncache(
     return cache_nodes
 
 
+def import_cachefile(node, filename, behavior=0):
+    """ WIP --- MAKE IT WORKS """
+
+    connected_cachenode = get_connected_cachenode([node])
+    if behavior is 0:
+        cmds.delete(connected_cachenode)
+    if behavior is 1:
+        if cmds.nodeType(connected_cachenode) == "cacheFile":
+            cmds.delete(connected_cachenode)
+    connections = disconnect_cachenodes(connected_cachenode)
+
+    def convert_channelname_to_inattr(channelname):
+        plug = "_".join(channelname.split("_")[:-1])
+        attribute = channelname.split("_")[-1]
+        return plug + "." + attribute
+
+    channels = cmds.cacheFile(fileName=filename, query=True, channelName=True)
+    inattrs = [convert_channelname_to_inattr(channel) for channel in channels]
+    cmds.cacheFile(attachFile=True, fileName=filename, inAttr=inattrs)
+
+    if connections:
+        reconnect_cachenodes(connections)
+
+
+def reconnect_cachenodes(connections, nodetypes=None):
+    '''
+    this method reconnect the cache receveiving a dict with the connections
+    setup before the cache.
+    '''
+    for cachenode, node in connections.iteritems():
+        cachefile = get_connected_cachenode(node)
+        if not cachefile:
+            attach_cachenode(cachenode, node)
+            continue
+
+        cf_type = cmds.nodeType(cachefile)
+        assert cf_type == 'cacheFile', '{} not cacheFile'.format(cachefile)
+
+        if cmds.nodeType(cachenode) == 'cacheBlend':
+            attach_cachefile_to_cacheblend(cachefile, cachenode, node)
+            disconnect_cachenodes(node)
+            attach_cachenode(cachenode, node)
+
+        elif cmds.nodeType(cachenode) == 'cacheFile':
+            cacheblend = cmds.createNode('cacheBlend')
+            attach_cachefile_to_cacheblend(cachefile, cacheblend, node)
+            attach_cachefile_to_cacheblend(cachenode, cacheblend, node)
+            disconnect_cachenodes(node)
+            attach_cachenode(cacheblend, node)
+
 def list_connected_cachefiles(nodes=None):
     '''
     :nodes: one or list of dynamic nodes as string ('hairSystem' and 'nCloth')
@@ -95,6 +145,16 @@ def get_connected_cachenode(node):
     return cachenodes[0]
 
 
+def get_connected_dynamicnodes(cachenode):
+    connected_dynamicnodes = []
+    for nodetype in ('nCloth', 'hairSystem'):
+        nodes = list(set(
+            cmds.listConnections(cachenode, source=False, type=nodetype)))
+        if nodes:
+            connected_dynamicnodes += nodes
+    return connected_dynamicnodes
+
+
 def disconnect_cachenodes(nodes=None):
     '''
     This method disconnect all cache node and return all connected nodes
@@ -103,10 +163,20 @@ def disconnect_cachenodes(nodes=None):
     '''
     if isinstance(nodes, (str, unicode)):
         nodes = [nodes]
-    attributes = "playFromCache", "positions"
+
+    attributes = {
+        'hairSystem': [
+            'playFromCache',
+            'positions',
+            'hairCounts',
+            'vertexCounts'],
+        'nCloth': [
+            'playFromCache',
+            'positions']}
+
     connections = {}
     for node in nodes:
-        for attribute in attributes:
+        for attribute in attributes[cmds.nodeType(node)]:
             attribute_connections = cmds.listConnections(
                 node + "." + attribute, plugs=True, connections=True)
             if not attribute_connections:
@@ -117,33 +187,6 @@ def disconnect_cachenodes(nodes=None):
             connections[outplug.split(".")[0]] = inplug.split(".")[0]
 
     return connections
-
-
-def reconnect_cachenodes(connections, nodetypes=None):
-    '''
-    this method reconnect the cache receveiving a dict with the connections
-    setup before the cache.
-    '''
-    for cachenode, node in connections.iteritems():
-        cachefile = get_connected_cachenode(node)
-        if not cachefile:
-            attach_cachenode(cachenode, node)
-            continue
-
-        cf_type = cmds.nodeType(cachefile)
-        assert cf_type == 'cacheFile', '{} not cacheFile'.format(cachefile)
-
-        if cmds.nodeType(cachenode) == 'cacheBlend':
-            attach_cachefile_to_cacheblend(cachefile, cachenode)
-            disconnect_cachenodes(node)
-            attach_cachenode(cachenode, node)
-
-        elif cmds.nodeType(cachenode) == 'cacheFile':
-            cacheblend = cmds.createNode('cacheBlend')
-            attach_cachefile_to_cacheblend(cachefile, cacheblend)
-            attach_cachefile_to_cacheblend(cachenode, cacheblend)
-            disconnect_cachenodes(node)
-            attach_cachenode(cacheblend, node)
 
 
 def find_free_cachedata_channel_index(cacheblend):
@@ -163,20 +206,36 @@ def connect_attributes(outnode, innode, connections):
             '{}.{}'.format(innode, in_attribute))
 
 
-def attach_cachefile_to_cacheblend(cachefile, cacheblend):
+def attach_cachefile_to_cacheblend(cachefile, cacheblend, node):
     i = find_free_cachedata_channel_index(cacheblend)
-    connections = {
-        'end': 'cacheData[{}].end'.format(i),
-        'inRange': 'cacheData[{}].range'.format(i),
-        'start': 'cacheData[{}].start'.format(i),
-        'outCacheData[0]': 'inCache[0].vectorArray[{}]'.format(i)}
+    if cmds.nodeType(node) == "nCloth":
+        connections = {
+            'end': 'cacheData[{}].end'.format(i),
+            'inRange': 'cacheData[{}].range'.format(i),
+            'start': 'cacheData[{}].start'.format(i),
+            'outCacheData[0]': 'inCache[0].vectorArray[{}]'.format(i)}
+    else:
+        connections = {
+            'end': 'cacheData[{}].end'.format(i),
+            'inRange': 'cacheData[{}].range'.format(i),
+            'start': 'cacheData[{}].start'.format(i),
+            'outCacheData[0]': 'inCache[0].vectorArray[{}]'.format(i),
+            'outCacheData[1]': 'inCache[1].vectorArray[{}]'.format(i),
+            'outCacheData[2]': 'inCache[2].vectorArray[{}]'.format(i)}
     connect_attributes(cachefile, cacheblend, connections)
 
 
 def attach_cachenode(cachenode, node):
-    connections = {
-        'outCacheData[0]': 'positions',
-        'inRange': 'playFromCache'}
+    if cmds.nodeType(cachenode) == "nCloth":
+        connections = {
+            'outCacheData[0]': 'positions',
+            'inRange': 'playFromCache'}
+    else:
+        connections = {
+            'outCacheData[0]': 'hairCounts',
+            'outCacheData[1]': 'vertexCounts',
+            'outCacheData[2]': 'positions',
+            'inRange': 'playFromCache'}
     connect_attributes(cachenode, node, connections)
 
 
