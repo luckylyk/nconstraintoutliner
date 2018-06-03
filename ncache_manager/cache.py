@@ -61,9 +61,16 @@ def record_ncache(
     return cache_nodes
 
 
-def import_cachefile(node, filename, behavior=0):
+def import_ncache(node, filename, behavior=0):
     """
-    WRITE DOCSTRING
+    This method create a cachenode and connect it to the corresponding dynamic
+    node. It respect the record_ncache behavior system.
+    :nodes: one or list of dynamic nodes as string ('hairSystem' and 'nCloth')
+    :filename: path pointing an mcx file
+    :behavior: as int
+        0: replace all old connected cachenodes and blendnodes
+        1: replace all old connected cachenodes but add new cache in blendnodes
+        2: blend all existing cachenodes with new cache
     """
 
     connected_cachenode = get_connected_cachenode([node])
@@ -113,6 +120,7 @@ def reconnect_cachenodes(connections, nodetypes=None):
             disconnect_cachenodes(node)
             attach_cachenode(cacheblend, node)
 
+
 def list_connected_cachefiles(nodes=None):
     '''
     :nodes: one or list of dynamic nodes as string ('hairSystem' and 'nCloth')
@@ -134,6 +142,10 @@ def list_connected_cacheblends(nodes=None):
 
 
 def get_connected_cachenode(node):
+    '''
+    :node: dynamic node  ('nCloth', 'hairSystem') as string
+    :return: the connected cacheFile or cacheBlend as string or None
+    '''
     assert cmds.nodeType(node) in ('nCloth', 'hairSystem')
     cachenodes = (
         (list_connected_cachefiles(node) or []) +
@@ -150,7 +162,8 @@ def get_connected_cachenode(node):
 def get_connected_dynamicnodes(cachenode):
     connected_dynamicnodes = []
     for nodetype in ('nCloth', 'hairSystem'):
-        nodes = cmds.listConnections(cachenode, shapes=True, source=False, type=nodetype)
+        nodes = cmds.listConnections(
+            cachenode, shapes=True, source=False, type=nodetype)
         if nodes:
             connected_dynamicnodes += list(set(nodes))
     return connected_dynamicnodes
@@ -209,20 +222,17 @@ def connect_attributes(outnode, innode, connections):
 
 def attach_cachefile_to_cacheblend(cachefile, cacheblend, node):
     i = find_free_cachedata_channel_index(cacheblend)
-    if cmds.nodeType(node) == "nCloth":
-        connections = {
-            'end': 'cacheData[{}].end'.format(i),
-            'inRange': 'cacheData[{}].range'.format(i),
-            'start': 'cacheData[{}].start'.format(i),
-            'outCacheData[0]': 'inCache[0].vectorArray[{}]'.format(i)}
-    else:
-        connections = {
-            'end': 'cacheData[{}].end'.format(i),
-            'inRange': 'cacheData[{}].range'.format(i),
-            'start': 'cacheData[{}].start'.format(i),
-            'outCacheData[0]': 'inCache[0].vectorArray[{}]'.format(i),
+    connections = {
+        'end': 'cacheData[{}].end'.format(i),
+        'inRange': 'cacheData[{}].range'.format(i),
+        'start': 'cacheData[{}].start'.format(i),
+        'outCacheData[0]': 'inCache[0].vectorArray[{}]'.format(i)}
+
+    if cmds.nodeType(node) == "hairSystem":
+        connections.update({
             'outCacheData[1]': 'inCache[1].vectorArray[{}]'.format(i),
-            'outCacheData[2]': 'inCache[2].vectorArray[{}]'.format(i)}
+            'outCacheData[2]': 'inCache[2].vectorArray[{}]'.format(i)})
+
     connect_attributes(cachefile, cacheblend, connections)
 
 
