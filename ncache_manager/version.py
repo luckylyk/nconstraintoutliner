@@ -16,6 +16,7 @@ import json
 
 INFOS_FILENAME = 'infos.json'
 VERSION_FOLDERNAME = 'version_{}'
+WORKSPACE_FOLDERNAME = 'caches'
 
 
 class CacheVersion(object):
@@ -32,6 +33,10 @@ class CacheVersion(object):
         with open(os.path.join(self.path, INFOS_FILENAME), 'r') as info_file:
             return json.load(info_file)
 
+    def save_infos(self):
+        with open(os.path.join(self.path, INFOS_FILENAME), 'w') as info_file:
+            return json.dump(self.infos, info_file, indent=2)
+
     def _get_mcx_files(self):
         return [
             os.path.join(self.path, f) for f in os.listdir(self.path)
@@ -42,8 +47,9 @@ class CacheVersion(object):
             os.path.join(self.path, f) for f in os.listdir(self.path)
             if f.endswith('.xml')]
 
-    def set_range(self):
-        pass
+    def set_range(self, start_frame=None, end_frame=None):
+        """ TODO """
+        self.save_infos()
 
 
 def list_available_cacheversion_paths(workspace):
@@ -70,6 +76,12 @@ def get_new_cacheversion_path(workspace):
             workspace, VERSION_FOLDERNAME.format(str(increment).zfill(3)))
 
     return cacheversion_path
+
+
+def create_workspace_folder(path):
+    path = os.path.join(path, WORKSPACE_FOLDERNAME)
+    os.mkdir(path)
+    return path
 
 
 def create_cacheversion(
@@ -101,4 +113,4 @@ if __name__ == "__main__":
         start_frame=1.0,
         end_frame=150.0)
 
-    cacheversion.set_range(1.0, 100.0)
+    cacheversion.set_range(start_frame=1.0, end_frame=100.0)

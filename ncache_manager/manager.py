@@ -1,9 +1,12 @@
 
 
+import os
 from maya import cmds
+from .version import create_cacheversion
+from .cache import import_ncache
 
 
-def connect_version(version, nodes=None):
+def connect_cacheversion(version, nodes=None):
     nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
     for node in nodes:
         for mcx_file in version.mcx_files:
