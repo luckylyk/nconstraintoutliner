@@ -6,6 +6,11 @@ from .version import create_cacheversion
 from .cache import import_ncache
 
 
+class CacheManager(object):
+    def __init__(self):
+        self.workspace = os.path.expanduser("~")
+
+
 def connect_cacheversion(version, nodes=None):
     nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
     for node in nodes:
@@ -15,3 +20,5 @@ def connect_cacheversion(version, nodes=None):
                     attachFile=True,
                     fileName=os.path.basename(mcx_file),
                     directory=os.path.dirname(mcx_file))
+
+
