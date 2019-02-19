@@ -82,5 +82,5 @@ def get_clothnode_color(clothnode_name):
     if not shaders:
         return None
 
-    r, g ,b = cmds.getAttr(shaders[0] + '.color')[0]
+    r, g, b = cmds.getAttr(shaders[0] + '.color')[0]
     return [int(c * 255) for c in (r, g ,b)]

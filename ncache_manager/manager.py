@@ -1,24 +1,84 @@
+"""
+This module is on top of cache and version
+It combine both to work in a defined workspace
+"""
 
-
-import os
+from datetime import datetime
 from maya import cmds
-from .version import create_cacheversion
-from .cache import import_ncache
+from .version import (
+    create_cacheversion, ensure_workspace_exists, find_mcx_file_match,
+    clear_cacheversion_content)
+from .cache import (
+    import_ncache, record_ncache, DYNAMIC_NODES, import_ncache,
+    clear_cachenodes)
+from .maps import save_pervertex_maps
 
 
-class CacheManager(object):
-    def __init__(self):
-        self.workspace = os.path.expanduser("~")
+def create_and_record_cacheversion(
+        workspace, start_frame, end_frame, comment=None, name=None, nodes=None,
+        behavior=0):
+    nodes = nodes or cmds.ls(type=DYNAMIC_NODES)
+    workspace = ensure_workspace_exists(workspace)
+
+    cacheversion = create_cacheversion(
+        workspace=workspace,
+        name=name,
+        comment=comment,
+        nodes=nodes,
+        start_frame=start_frame,
+        end_frame=end_frame,
+        timespent=None)
+    save_pervertex_maps(nodes=nodes, directory=cacheversion.directory)
+
+    start_time = datetime.now()
+    record_ncache(
+        nodes=nodes,
+        start_frame=start_frame,
+        end_frame=end_frame,
+        output=cacheversion.directory,
+        behavior=behavior)
+    end_time = datetime.now()
+    timespent = (end_time - start_time).total_seconds()
+    time = cmds.currentTime(query=True)
+    cacheversion.set_range(nodes, start_frame=start_frame, end_frame=time)
+    cacheversion.set_timespent(nodes=nodes, seconds=timespent)
+    return cacheversion
 
 
-def connect_cacheversion(version, nodes=None):
-    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
+def record_in_existing_cacheversion(
+        cacheversion, start_frame, end_frame, nodes=None, behavior=0):
+    nodes = nodes or cmds.ls(type=DYNAMIC_NODES)
+    save_pervertex_maps(nodes=nodes, directory=cacheversion.directory)
+    start_time = datetime.now()
+    record_ncache(
+        nodes=nodes,
+        start_frame=start_frame,
+        end_frame=end_frame,
+        output=cacheversion.directory,
+        behavior=behavior)
+    end_time = datetime.now()
+    timespent = (end_time - start_time).total_seconds()
+    time = cmds.currentTime(query=True)
+    cacheversion.set_range(nodes, start_frame=start_frame, end_frame=time)
+    cacheversion.set_timespent(nodes=nodes, seconds=timespent)
+
+
+def connect_cacheversion(cacheversion, nodes=None, behavior=0):
+    nodes = nodes or cmds.ls(type=DYNAMIC_NODES)
     for node in nodes:
-        for mcx_file in version.mcx_files:
-            if node.replace(":", "_") in mcx_file:
-                cmds.cacheFile(
-                    attachFile=True,
-                    fileName=os.path.basename(mcx_file),
-                    directory=os.path.dirname(mcx_file))
+        mcx_file = find_mcx_file_match(node, cacheversion)
+        if not mcx_file:
+            continue
+        import_ncache(node, mcx_file, behavior=behavior)
 
 
+def delete_cacheversion(cacheversion):
+    cachenames = [f[:-4] for f in cacheversion.mcx_file]
+    clear_cachenodes(cachenames=cachenames, workspace=cacheversion.workspace)
+    clear_cacheversion_content(cacheversion)
+
+
+if __name__ == "__main__":
+    create_and_record_cacheversion(
+        workspace="C:/test/chrfx", nodes=None, start_frame=0, end_frame=100,
+        behavior=2, name="Cache", comment="salut")

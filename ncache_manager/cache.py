@@ -21,6 +21,9 @@ The module respect a nomenclature:
 from maya import cmds, mel
 
 
+DYNAMIC_NODES = 'nCloth', 'hairSystem'
+
+
 def record_ncache(
         nodes=None, start_frame=0, end_frame=100, output=None, behavior=0):
     '''
@@ -33,16 +36,16 @@ def record_ncache(
         1: replace all old connected cachenodes but add new cache in blendnodes
         2: blend all existing cachenodes with new cache
     '''
-    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
+    nodes = nodes or cmds.ls(DYNAMIC_NODES)
     output = output or ''
 
-    if behavior is 0:
+    if behavior == 0:
         cmds.delete(list_connected_cachefiles(nodes))
         cmds.delete(list_connected_cacheblends(nodes))
-    elif behavior is 1:
+    elif behavior == 1:
         cmds.delete(list_connected_cachefiles(nodes))
         connections = disconnect_cachenodes(nodes)
-    elif behavior is 2:
+    elif behavior == 2:
         connections = disconnect_cachenodes(nodes)
 
     cmds.select(nodes)
@@ -125,7 +128,7 @@ def list_connected_cachefiles(nodes=None):
     '''
     :nodes: one or list of dynamic nodes as string ('hairSystem' and 'nCloth')
     '''
-    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
+    nodes = nodes or cmds.ls(DYNAMIC_NODES)
     cachenodes = cmds.listConnections(nodes, type='cacheFile')
     if cachenodes:
         return list(set(cachenodes))
@@ -135,7 +138,7 @@ def list_connected_cacheblends(nodes=None):
     '''
     :nodes: one or list of dyna,ic nodes as string ('hairSystem' and 'nCloth')
     '''
-    nodes = nodes or cmds.ls(type=('nCloth', 'hairSystem'))
+    nodes = nodes or cmds.ls(DYNAMIC_NODES)
     blendnodes = cmds.listConnections(nodes, type='cacheBlend')
     if blendnodes:
         return list(set(blendnodes))
@@ -250,7 +253,7 @@ def attach_cachenode(cachenode, node):
     connect_attributes(cachenode, node, connections)
 
 
-def clear_cachenodes(nodes=None):
+def clear_cachenodes(nodes=None, cachenames=None, workspace=None):
     if nodes:
         cachenodes = (
             (list_connected_cachefiles(nodes) or []) +
@@ -258,6 +261,14 @@ def clear_cachenodes(nodes=None):
     else:
         cachenodes = cmds.ls(type=('cacheFile', 'cacheBlend'))
     cmds.delete(cachenodes)
+    if (cachenames and workspace) is None:
+        return
+    cachenodes = cmds.ls(type='cacheFile')
+    for cachenode in cachenodes:
+        if cmds.getAttr(cachenode + '.cachePath') != workspace:
+            continue
+        if cmds.getAttr(cachenode + '.cacheName') in cachenames:
+            cmds.delete(cachenode)
 
 
 if __name__ == "__main__":
