@@ -54,3 +54,5 @@ def set_pervertex_maps(nodes=None, directory=''):
         for attribute, values in attributes[node].items():
             cmds.setAttr(
                 node + '.' + attribute, values, dataType='doubleArray')
+
+

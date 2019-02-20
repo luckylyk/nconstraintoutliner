@@ -31,7 +31,7 @@ WORKSPACE_FOLDERNAME = 'caches'
 
 class CacheVersion(object):
     def __init__(self, directory):
-        self.directory = directory
+        self.directory = directory.replace("\\", "/")
         if not os.path.exists(os.path.join(self.directory, INFOS_FILENAME)):
             raise ValueError('Invalid version directory')
 

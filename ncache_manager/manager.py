@@ -10,7 +10,7 @@ from .version import (
     clear_cacheversion_content)
 from .cache import (
     import_ncache, record_ncache, DYNAMIC_NODES, import_ncache,
-    clear_cachenodes)
+    clear_cachenodes, list_connected_cachefiles, list_connected_cacheblends)
 from .maps import save_pervertex_maps
 
 
@@ -76,6 +76,17 @@ def delete_cacheversion(cacheversion):
     cachenames = [f[:-4] for f in cacheversion.mcx_file]
     clear_cachenodes(cachenames=cachenames, workspace=cacheversion.workspace)
     clear_cacheversion_content(cacheversion)
+
+
+def filter_connected_cacheversions(nodes=None, cacheversions=None):
+    assert cacheversions is not None
+    nodes.extend(list_connected_cacheblends(nodes) or [])
+    cachenodes = list_connected_cachefiles(nodes)
+    directories = list({cmds.getAttr(n + '.filePath') for n in cachenodes})
+    return [
+        cacheversion for cacheversion in cacheversions
+        if cacheversion.directory in directories]
+
 
 
 if __name__ == "__main__":
