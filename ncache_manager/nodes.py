@@ -74,7 +74,7 @@ def get_clothnode_color(clothnode_name):
         return None
 
     shading_engines = cmds.listConnections(
-            outmeshes[0] + '.instObjGroups', type='shadingEngine')
+        outmeshes[0] + '.instObjGroups', type='shadingEngine')
     if not shading_engines:
         return None
 
@@ -84,3 +84,31 @@ def get_clothnode_color(clothnode_name):
 
     r, g, b = cmds.getAttr(shaders[0] + '.color')[0]
     return [int(c * 255) for c in (r, g ,b)]
+
+
+def set_clothnode_color(clothnode_name, red, green, blue):
+    outmeshes = cmds.listConnections(
+        clothnode_name + '.outputMesh', type='mesh', shapes=True)
+    if not outmeshes:
+        return None
+    old_shading_engines = cmds.listConnections(
+        outmeshes[0] + '.instObjGroups', type='shadingEngine')
+    if not old_shading_engines:
+        return None
+
+    blinn = cmds.shadingNode('blinn', asShader=True)
+    cmds.setAttr(blinn + ".color", red, green, blue, type='double3')
+
+    selection = cmds.ls(sl=True)
+    cmds.select(outmeshes)
+    cmds.hyperShade(assign=blinn)
+    # old_shading_engines should contain only one shading engine
+    for shading_engine in old_shading_engines:
+        connected = cmds.listConnections(shading_engine + ".dagSetMembers")
+        if connected:
+            return
+        blinns = cmds.listConnections(shading_engine, type='blinn')
+        cmds.delete(shading_engine)
+        cmds.delete(blinns)
+    cmds.select(selection)
+
