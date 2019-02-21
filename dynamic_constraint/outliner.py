@@ -148,6 +148,7 @@ class DynamicConstraintOutliner(QtWidgets.QWidget):
                 dc.switch()
         print('switched')
 
+
 class CreateDynamicConstraintAction(QtWidgets.QAction):
     def __init__(self, name, parent=None):
         super(CreateDynamicConstraintAction, self).__init__(name, parent)
