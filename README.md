@@ -4,6 +4,10 @@ Author: Lionel Brouyère
 
 ### Description  
 Simple widget who list all nodes 'dynamicConstraint'.  
+<center>
+<img src="https://raw.githubusercontent.com/luckylyk/nconstraintoutliner/master/ressources/nconstraint_screenshot.jpg" alt="drawing" align="center" width="500"/></center>  
+  
+  
 Features:  
   - shortcuts to manage constraint ncomponents
   - shortcuts to paint the influences vertex maps
