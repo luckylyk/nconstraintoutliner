@@ -1,63 +1,66 @@
 """
-This is an Dynamic Constraints outliner, using the dynamic_constrain.py
+This is an NConstraints outliner, using the nconstraint.py
 it allow you to create new constraint, activate them, select members,
 paint components, etc ...
 """
 
 import os
 import sys
+
 from PySide2 import QtWidgets, QtCore, QtGui
-from maya_libs.qt.main_window import get_maya_windows
-from .dynamic_constraint import (
-    DYNAMIC_CONTRAINT_TYPES, list_dynamic_constraints,
-    DynamicConstraint, list_dynamic_constraints_components)
 from maya import cmds
+import maya.OpenMaya as om
+
+from nconstraintoutliner.nconstraint import (
+    DYNAMIC_CONTRAINT_TYPES, list_nconstraints,
+    DynamicConstraint, list_nconstraints_components)
 
 
+FULL_UPDATE_REQUIRED_EVENTS = (
+    om.MSceneMessage.kAfterNew,
+    om.MSceneMessage.kAfterImport,
+    om.MSceneMessage.kAfterOpen,
+    om.MSceneMessage.kAfterRemoveReference,
+    om.MSceneMessage.kAfterUnloadReference,
+    om.MSceneMessage.kAfterCreateReference)
 ICONPATH = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), 'icons')
 
 
-class DynamicConstraintOutliner(QtWidgets.QWidget):
+class NConstraintOutliner(QtWidgets.QWidget):
     BUTTON_SIZE = QtCore.QSize(24, 24)
     ICON_SIZE = QtCore.QSize(24, 24)
 
     def __init__(self, parent=None):
-        super(DynamicConstraintOutliner, self).__init__(parent, QtCore.Qt.Tool)
+        super(NConstraintOutliner, self).__init__(parent, QtCore.Qt.Tool)
         self.setWindowTitle('Dynamic Constraint Outliner')
-        self.initUI()
+        self._callbacks = []
 
-    def initUI(self):
-
-        self._dynamic_constraint_table_view = DynamicConstraintTableView()
-        self._dynamic_constraint_table_model = DynamicConstraintTableModel()
-        self._dynamic_constraint_table_view.set_model(
-            self._dynamic_constraint_table_model)
-        self._dynamic_constraint_item_delegate = DynamicConstraintDelegate(
-            self._dynamic_constraint_table_view)
-        self._dynamic_constraint_item_delegate.switched.connect(
-            self.switch_selected_constraints)
-        self._dynamic_constraint_table_view.set_item_delegate(
-            self._dynamic_constraint_item_delegate)
+        self._table_view = DynamicConstraintTableView()
+        self._table_model = DynamicConstraintTableModel()
+        self._table_view.set_model(self._table_model)
+        self._item_delegate = DynamicConstraintDelegate(self._table_view)
+        self._item_delegate.switched.connect(self.switch_selected_constraints)
+        self._table_view.set_item_delegate(self._item_delegate)
 
         self._filter_component_label = QtWidgets.QLabel('filter by component:')
         self._filter_component_combobox = QtWidgets.QComboBox()
         self._filter_component_combobox.setFixedWidth(250)
-        self._filter_component_combobox.currentIndexChanged.connect(
-            self.update_dynamic_constraints_components)
-        self._filter_component_combobox.currentIndexChanged.connect(
-            self.update_dynamic_constraints)
+        method = self.update_nconstraints_components
+        self._filter_component_combobox.currentIndexChanged.connect(method)
+        method = self.update_nconstraints
+        self._filter_component_combobox.currentIndexChanged.connect(method)
 
         self._select_constraints_button = QtWidgets.QPushButton()
-        self._select_constraints_button.setToolTip(
-            'select Dynamic Constraints')
+        tooltip = 'select Dynamic Constraints'
+        self._select_constraints_button.setToolTip(tooltip)
         icon = QtGui.QIcon(os.path.join(ICONPATH, 'select_constraint.png'))
         self._select_constraints_button.setIcon(icon)
         self._select_constraints_button.setIconSize(self.ICON_SIZE)
         self._select_constraints_button.setFixedSize(self.BUTTON_SIZE)
         self._select_constraints_button.setContentsMargins(0, 0, 0, 0)
-        self._select_constraints_button.released.connect(
-            self.select_constraints)
+        method = self.select_constraints
+        self._select_constraints_button.released.connect(method)
 
         self._create_constraint_menu = CreateDynamicConstraintMenu()
         self._create_constraint_button = QtWidgets.QPushButton()
@@ -72,11 +75,11 @@ class DynamicConstraintOutliner(QtWidgets.QWidget):
             self._create_constraint_button.showMenu)
 
         self._filter_constraint_type_menu = FilterDynamicConstraintMenu()
-        self._filter_constraint_type_menu.stateChanged.connect(
-            self.update_dynamic_constraints)
+        method = self.update_nconstraints
+        self._filter_constraint_type_menu.stateChanged.connect(method)
         self._filter_constraint_type_button = QtWidgets.QPushButton()
-        self._filter_constraint_type_button.setToolTip(
-            'filter Dynamic Constraints by types')
+        tooltip = 'filter Dynamic Constraints by types'
+        self._filter_constraint_type_button.setToolTip(tooltip)
         icon = QtGui.QIcon(os.path.join(ICONPATH, 'filter.png'))
         self._filter_constraint_type_button.setIcon(icon)
         self._filter_constraint_type_button.setContentsMargins(0, 0, 0, 0)
@@ -92,9 +95,8 @@ class DynamicConstraintOutliner(QtWidgets.QWidget):
         self._refresh.setIcon(icon)
         self._refresh.setIconSize(self.ICON_SIZE)
         self._refresh.setFixedSize(self.BUTTON_SIZE)
-        self._refresh.clicked.connect(
-            self.update_dynamic_constraints_components)
-        self._refresh.clicked.connect(self.update_dynamic_constraints)
+        self._refresh.clicked.connect(self.update_nconstraints_components)
+        self._refresh.clicked.connect(self.update_nconstraints)
 
         self._buttons_layout = QtWidgets.QHBoxLayout()
         self._buttons_layout.setSpacing(4)
@@ -108,22 +110,21 @@ class DynamicConstraintOutliner(QtWidgets.QWidget):
 
         self._layout = QtWidgets.QVBoxLayout(self)
         self._layout.addLayout(self._buttons_layout)
-        self._layout.addWidget(self._dynamic_constraint_table_view)
+        self._layout.addWidget(self._table_view)
 
-        self.update_dynamic_constraints()
-        self.update_dynamic_constraints_components()
+        self.update_nconstraints()
+        self.update_nconstraints_components()
 
-    def update_dynamic_constraints(self):
+    def update_nconstraints(self, *unused_callbacks_args):
         types = self._filter_constraint_type_menu.filters
-        component = self._filter_component_combobox.currentText() \
-            if self._filter_component_combobox.currentIndex() else None
+        component = self._filter_component_combobox.currentText()
         components = [component] if component else None
 
-        self._dynamic_constraint_table_model.set_dynamic_constraints(
-            list_dynamic_constraints(types=types, components=components))
+        self._table_model.set_nconstraints(
+            list_nconstraints(types=types, components=components))
 
-    def update_dynamic_constraints_components(self):
-        components = ['All'] + list_dynamic_constraints_components()
+    def update_nconstraints_components(self):
+        components = ['All'] + list_nconstraints_components()
         current_component = self._filter_component_combobox.currentText()
 
         self._filter_component_combobox.blockSignals(True)
@@ -138,27 +139,66 @@ class DynamicConstraintOutliner(QtWidgets.QWidget):
         self._filter_component_combobox.blockSignals(False)
 
     def select_constraints(self):
-        dcs = self._dynamic_constraint_table_view.selected_constraints
-        nodes = [dc.parent for dc in dcs]
+        nconstraints = self._table_view.selected_constraints
+        if not nconstraints:
+            return
+        nodes = [dc.parent for dc in nconstraints]
         cmds.select(nodes)
 
     def switch_selected_constraints(self, state):
-        for dc in self._dynamic_constraint_table_view.selected_constraints:
+        for dc in self._table_view.selected_constraints:
             if dc.enable == state:
                 dc.switch()
-        print('switched')
+
+    def register_callbacks(self):
+        method = self._remove_node_callback
+        cb = om.MDGMessage.addNodeRemovedCallback(method, "dynamicConstraint")
+        self._callbacks.append(cb)
+        method = self._created_node_callback
+        cb = om.MDGMessage.addNodeAddedCallback(method, "dynamicConstraint")
+        self._callbacks.append(cb)
+        method = self.update_nconstraints
+        for event in FULL_UPDATE_REQUIRED_EVENTS:
+            cb = om.MSceneMessage.addCallback(event, method)
+            self._callbacks.append(cb)
+
+    def unregister_callbacks(self):
+        for callback in self._callbacks:
+            om.MMessage.removeCallback(callback)
+        self._callbacks = []
+
+    def _remove_node_callback(self, mobject, *unused_callbacks_args):
+        node = om.MFnDagNode(mobject).name()
+        nconstraints = [
+            n for n in self._table_model.nconstraints if n.nodename == node]
+        if not nconstraints:
+            return
+        for nconstraint in nconstraints:
+            self._table_model.remove_nconstraint(nconstraint)
+
+    def _created_node_callback(self, mobject, *unused_callbacks_args):
+        node = DynamicConstraint(om.MFnDagNode(mobject).name())
+        self._table_model.insert_nconstraint(node)
+
+    def show(self):
+        self.register_callbacks()
+        return super(NConstraintOutliner, self).show()
+
+    def closeEvent(self, event):
+        self.unregister_callbacks()
+        return super(NConstraintOutliner, self).closeEvent(event)
 
 
 class CreateDynamicConstraintAction(QtWidgets.QAction):
     def __init__(self, name, parent=None):
         super(CreateDynamicConstraintAction, self).__init__(name, parent)
-        self.dynamic_constraint_type = None
-        self.triggered.connect(self._create_dynamic_constraint)
+        self.nconstraint_type = None
+        self.triggered.connect(self._create_nconstraint)
 
-    def _create_dynamic_constraint(self):
-        if self.dynamic_constraint_type is None:
+    def _create_nconstraint(self):
+        if self.nconstraint_type is None:
             return
-        DynamicConstraint.create(self.dynamic_constraint_type)
+        DynamicConstraint.create(self.nconstraint_type)
 
 
 class CreateDynamicConstraintMenu(QtWidgets.QMenu):
@@ -169,7 +209,7 @@ class CreateDynamicConstraintMenu(QtWidgets.QMenu):
             if index == 0:
                 continue
             action = CreateDynamicConstraintAction(dc_type['name'], self)
-            action.dynamic_constraint_type = index
+            action.nconstraint_type = index
             self.addAction(action)
 
 
@@ -181,7 +221,7 @@ class FilterDynamicConstraintMenu(QtWidgets.QMenu):
         self._actions = []
         for index, dc_type in enumerate(DYNAMIC_CONTRAINT_TYPES):
             action = QtWidgets.QAction(dc_type['name'], self)
-            action.dynamic_constraint_type = index
+            action.nconstraint_type = index
             action.setCheckable(True)
             action.setChecked(True)
             action.toggled.connect(self._state_changed)
@@ -202,7 +242,7 @@ class FilterDynamicConstraintMenu(QtWidgets.QMenu):
         filters = []
         for action in self._actions:
             if action.isChecked():
-                filters.append(action.dynamic_constraint_type)
+                filters.append(action.nconstraint_type)
         return filters
 
     def _call_deselect_all(self):
@@ -225,14 +265,14 @@ class FilterDynamicConstraintMenu(QtWidgets.QMenu):
 
 class OnOffLabel(QtWidgets.QWidget):
 
-    def __init__(self, dynamic_constraint, parent=None):
+    def __init__(self, nconstraint, parent=None):
         super(OnOffLabel, self).__init__(parent)
-        self._dynamic_constraint = dynamic_constraint
+        self._nconstraint = nconstraint
         self.setFixedSize(24, 24)
         self.repaint()
 
     def mousePressEvent(self, event):
-        self._dynamic_constraint.switch()
+        self._nconstraint.switch()
         self.repaint()
 
     def paintEvent(self, event):
@@ -242,7 +282,7 @@ class OnOffLabel(QtWidgets.QWidget):
             False: DynamicConstraintDelegate.OFF_ICON}
         if icons[True] is None or icons[False] is None:
             return
-        icon = icons[self._dynamic_constraint.enable]
+        icon = icons[self._nconstraint.enable]
         painter.drawPixmap(
             self.rect(), icon.pixmap(32, 32).scaled(
                 DynamicConstraintDelegate.ICON_SIZE,
@@ -271,10 +311,10 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
     def paint(self, painter, option, index):
         row, column = index.row(), index.column()
         style = QtWidgets.QApplication.style()
-        dynamic_constraint = self._model.data(index, QtCore.Qt.UserRole)
+        nconstraint = self._model.data(index, QtCore.Qt.UserRole)
 
         if column == 0:
-            icon = self.ON_ICON if dynamic_constraint.enable else self.OFF_ICON
+            icon = self.ON_ICON if nconstraint.enable else self.OFF_ICON
             rect = QtCore.QRect(
                 option.rect.center().x() - 8, option.rect.center().y() - 8,
                 16, 16)
@@ -283,7 +323,7 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
             return
 
         if column == 1:
-            brush = QtGui.QBrush(QtGui.QColor(*dynamic_constraint.color))
+            brush = QtGui.QBrush(QtGui.QColor(*nconstraint.color))
             pen = QtGui.QPen(QtGui.QColor(0, 0, 0))
             painter.setBrush(brush)
             painter.setPen(pen)
@@ -294,7 +334,7 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
             return
 
         if column == 2:
-            if dynamic_constraint.is_well_named:
+            if nconstraint.is_well_named:
                 color = QtGui.QPalette().color(QtGui.QPalette.WindowText)
             else:
                 color = QtGui.QColor('red')
@@ -302,14 +342,14 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
                 option.rect.left() + 5,
                 (option.rect.height() / 2 + option.rect.top() + 3))
             painter.setPen(color)
-            painter.drawText(point, dynamic_constraint.parent)
+            painter.drawText(point, nconstraint.parent)
             return
 
         elif column == 3:
             point = QtCore.QPoint(
                 option.rect.left() + 5,
                 (option.rect.height() / 2 + option.rect.top() + 3))
-            text = dynamic_constraint.type_name
+            text = nconstraint.type_name
             painter.setPen(QtGui.QPalette().color(QtGui.QPalette.WindowText))
             painter.drawText(point, text)
             return
@@ -338,16 +378,16 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
             self.ICON_SIZE, transformMode=QtCore.Qt.SmoothTransformation))
         return
 
-    def createEditor(self, parent, option, index):
-        row, column = index.row(), index.column()
-        dynamic_constraint = self._model.data(index, QtCore.Qt.UserRole)
+    def createEditor(self, parent, _, index):
+        column = index.column()
+        nconstraint = self._model.data(index, QtCore.Qt.UserRole)
 
         if column == 0:
-            editor = OnOffLabel(dynamic_constraint, parent=parent)
+            editor = OnOffLabel(nconstraint, parent=parent)
             return editor
 
         if column == 1:
-            dynamic_constraint.set_color_from_dialogbox()
+            nconstraint.set_color_from_dialogbox()
             return None
 
         if column == 2:
@@ -356,14 +396,14 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
         if column == 3:
             editor = QtWidgets.QComboBox(parent)
             editor.addItems([d['name'] for d in DYNAMIC_CONTRAINT_TYPES])
-            editor.setCurrentIndex(dynamic_constraint.type)
-            editor.currentIndexChanged.connect(dynamic_constraint.set_type)
+            editor.setCurrentIndex(nconstraint.type)
+            editor.currentIndexChanged.connect(nconstraint.set_type)
             return editor
 
         elif column == 4:
             editor = QtWidgets.QPushButton(
                 self.SELECT_MEMBERS_ICON, '', parent)
-            editor.clicked.connect(dynamic_constraint.select_members)
+            editor.clicked.connect(nconstraint.select_members)
             editor.click()
             editor.setIconSize(self.ICON_SIZE)
             return editor
@@ -371,7 +411,7 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
         elif column == 5:
             editor = QtWidgets.QPushButton(self.ADD_MEMBERS_ICON, '', parent)
             editor.clicked.connect(
-                dynamic_constraint.add_selection_to_members)
+                nconstraint.add_selection_to_members)
             editor.click()
             editor.setIconSize(self.ICON_SIZE)
             return editor
@@ -381,14 +421,14 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
                 self.REMOVE_MEMBERS_ICON, '', parent)
             editor.setIconSize(self.ICON_SIZE)
             editor.clicked.connect(
-                dynamic_constraint.remove_selection_to_members)
+                nconstraint.remove_selection_to_members)
             editor.click()
             return editor
 
         elif column == 7:
             editor = QtWidgets.QPushButton(self.PAINT_ICON, '', parent)
             editor.clicked.connect(
-                dynamic_constraint.paint_constraint_strength_map_on_components)
+                nconstraint.paint_constraint_strength_map_on_components)
             editor.click()
             editor.setIconSize(self.ICON_SIZE)
             return editor
@@ -396,25 +436,24 @@ class DynamicConstraintDelegate(QtWidgets.QAbstractItemDelegate):
         elif column == 8:
             editor = QtWidgets.QPushButton(self.RENAME_ICON, '', parent)
             editor.clicked.connect(
-                dynamic_constraint.rename_node_from_components)
+                nconstraint.rename_node_from_components)
             editor.click()
             editor.setIconSize(self.ICON_SIZE)
             return editor
 
-    def setEditorData(self, editor, index):
-        row, column = index.row(), index.column()
-        dynamic_constraint = self._model.data(index, QtCore.Qt.UserRole)
-        if column == 0:
-            dynamic_constraint.switch()
+    def setEditorData(self, _, index):
+        nconstraint = self._model.data(index, QtCore.Qt.UserRole)
+        if index.column() == 0:
+            nconstraint.switch()
 
     def updateEditorGeometry(self, editor, option, index):
         editor.setGeometry(option.rect)
 
-    def sizeHint(self, option, index):
-        col = index.column()
-        if col == 2:
+    def sizeHint(self, _, index):
+        column = index.column()
+        if column == 2:
             return QtCore.QSize(350, 15)
-        if col == 3:
+        if column == 3:
             return QtCore.QSize(150, 15)
         else:
             return QtCore.QSize(24, 24)
@@ -461,42 +500,53 @@ class DynamicConstraintTableModel(QtCore.QAbstractTableModel):
 
     def __init__(self, parent=None):
         super(DynamicConstraintTableModel, self).__init__(parent)
-        self._dynamic_constraints = []
+        self.nconstraints = []
 
     def rowCount(self, index):
-        return len(self._dynamic_constraints)
+        return len(self.nconstraints)
 
     def columnCount(self, index):
         return 9
+
+    def remove_nconstraint(self, nconstraint):
+        self.layoutAboutToBeChanged.emit()
+        self.nconstraints.remove(nconstraint)
+        self.layoutChanged.emit()
+
+    def insert_nconstraint(self, nconstraint):
+        self.layoutAboutToBeChanged.emit()
+        self.nconstraints.append(nconstraint)
+        self.nconstraints = sorted(self.nconstraints, key=lambda x: x.nodename)
+        self.layoutChanged.emit()
 
     def sort(self, column, order):
         reverse = order != QtCore.Qt.AscendingOrder
         self.layoutAboutToBeChanged.emit()
         if column == 0:
-            self._dynamic_constraints = sorted(
-                self._dynamic_constraints,
+            self.nconstraints = sorted(
+                self.nconstraints,
                 key=lambda dc: dc.enable, reverse=reverse)
         if column == 2:
-            self._dynamic_constraints = sorted(
-                self._dynamic_constraints,
+            self.nconstraints = sorted(
+                self.nconstraints,
                 key=lambda dc: dc.parent, reverse=reverse)
         elif column == 3:
-            self._dynamic_constraints = sorted(
-                self._dynamic_constraints,
+            self.nconstraints = sorted(
+                self.nconstraints,
                 key=lambda dc: dc.type, reverse=reverse)
         self.layoutChanged.emit()
 
     def data(self, index, role):
-        dynamic_constraint = self._dynamic_constraints[index.row()]
         row, col = index.row(), index.column()
+        nconstraint = self.nconstraints[row]
         if role == QtCore.Qt.UserRole:
-            return dynamic_constraint
+            return nconstraint
 
         elif role == QtCore.Qt.DisplayRole:
-            return dynamic_constraint.parent
+            return nconstraint.parent
 
         elif role == QtCore.Qt.TextColorRole:
-            if dynamic_constraint.is_well_named:
+            if nconstraint.is_well_named:
                 return QtGui.QPalette().color(QtGui.QPalette.WindowText)
             else:
                 return QtGui.QColor('grey')
@@ -510,9 +560,9 @@ class DynamicConstraintTableModel(QtCore.QAbstractTableModel):
             flags |= QtCore.Qt.ItemIsEditable
         return flags
 
-    def set_dynamic_constraints(self, dynamic_constraints):
+    def set_nconstraints(self, nconstraints):
         self.layoutAboutToBeChanged.emit()
-        self._dynamic_constraints = dynamic_constraints
+        self.nconstraints = nconstraints
         self.layoutChanged.emit()
 
     def headerData(self, section, orientation, role):
@@ -572,9 +622,3 @@ class DynamicConstraintTableView(QtWidgets.QTableView):
             if index == 2:
                 continue
             self.setItemDelegateForColumn(index, item_delegate)
-
-
-def launch():
-    outliner = DynamicConstraintOutliner(get_maya_windows())
-    outliner.show()
-    return outliner

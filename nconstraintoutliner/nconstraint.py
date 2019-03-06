@@ -14,15 +14,12 @@ from itertools import cycle
 from maya import cmds, mel
 import maya.api.OpenMaya as om2
 
-from maya_libs.selection.context_managers import MayaSelectionManager
-from maya_libs.selection.decorators import (
-    preserve_selection, selection_required)
+from nconstraintoutliner.selection import (
+    MayaSelectionManager, preserve_selection, selection_required)
 
-from .component import get_dynamic_constraint_members
 
 TYPE_ATTR_NAME = 'constraintType'
 TYPE_ATTR_LONGNAME = 'Dynamic Constraint Type'
-
 PRESETS_FOLDER = 'presets'
 DYNAMIC_CONTRAINT_TYPES = [
     {
@@ -82,9 +79,9 @@ class DynamicConstraint(object):
     creation preset and a name auto-generated in the outliner.
 
     this object can be instancied around an existing node:
-    dynamic_constraint = DynamicConstraint(nodename='existing_nConstraintShape')
+    nconstraint = DynamicConstraint(nodename='existing_nConstraintShape')
     or instancied creating a new constraint node in maya:
-    dynamic_constraint = DynamicConstraint.create(DynamicConstraint.TRANSFORM)
+    nconstraint = DynamicConstraint.create(DynamicConstraint.TRANSFORM)
     """
     UNDEFINED = 0
     TRANSFORM = 1
@@ -111,14 +108,14 @@ class DynamicConstraint(object):
         Alternative constructor, creating the node in maya and name it correctly
         '''
         constraint_type = constraint_type or DynamicConstraint.UNDEFINED
-        constraint_node = create_dynamic_constraint_node(constraint_type)
-        dynamic_constraint = DynamicConstraint(constraint_node)
-        dynamic_constraint.rename_node_from_components()
-        return dynamic_constraint
+        constraint_node = create_nconstraint_node(constraint_type)
+        nconstraint = DynamicConstraint(constraint_node)
+        nconstraint.rename_node_from_components()
+        return nconstraint
 
     @property
     def color(self):
-        return get_dynamic_constraint_color(self.nodename)
+        return get_nconstraint_color(self.nodename)
 
     @property
     def components_iterator(self):
@@ -130,7 +127,7 @@ class DynamicConstraint(object):
     def components(self):
         ''' return objects members parent's '''
         if self._components is None:
-            self._components = get_dynamic_constraint_components(self.nodename)
+            self._components = get_nconstraint_components(self.nodename)
             self._components_iterator = None
         return self._components
 
@@ -157,7 +154,7 @@ class DynamicConstraint(object):
     @property
     def nice_name(self):
         if self._nice_name is None:
-            self._nice_name = get_dynamic_constraint_nice_name(self.nodename)
+            self._nice_name = get_nconstraint_nice_name(self.nodename)
         return self._nice_name
 
     @property
@@ -214,7 +211,7 @@ class DynamicConstraint(object):
         cmds.select(self.nodename)
 
     def set_color(self, r, g, b):
-        set_dynamic_constraint_color(self.nodename, r, g ,b)
+        set_nconstraint_color(self.nodename, r, g ,b)
 
     def set_color_from_dialogbox(self):
         cmds.colorEditor(rgb=[c / 255.0 for c in self.color])
@@ -233,14 +230,14 @@ class DynamicConstraint(object):
         # to avoid a change from a tweaked constraint done with the maya tools
         if old_type == DynamicConstraint.UNDEFINED:
             return
-        apply_presets_on_dynamic_constraint(self.nodename, constraint_type)
+        apply_presets_on_nconstraint(self.nodename, constraint_type)
 
     def switch(self):
         cmds.setAttr(self.nodename + '.enable', not self.enable)
         return self.enable
 
 
-def apply_presets_on_dynamic_constraint(constraint_shape, constraint_type):
+def apply_presets_on_nconstraint(constraint_shape, constraint_type):
     """
     this method opening the json file linked to the constraint type
     it applying the presets
@@ -278,7 +275,7 @@ def add_and_set_constraint_type_attribute(constraint_shape, constraint_type):
 
 
 @selection_required
-def create_dynamic_constraint_node(constraint_type):
+def create_nconstraint_node(constraint_type):
     """
     this method create an nConstraint and apply the custom enum attribute
     containing the different presets name and set the given one.
@@ -338,7 +335,7 @@ def get_component_transform(component):
     return cmds.listRelatives(mesh, parent=True)[0]
 
 
-def get_dynamic_constraint_color(constraint_shape):
+def get_nconstraint_color(constraint_shape):
     '''
     smart function who return the nconstraint viewport color.
     It working as a normal transform override color except if color is
@@ -363,7 +360,7 @@ def get_dynamic_constraint_color(constraint_shape):
         return 25, 25, 125
 
 
-def get_dynamic_constraint_components(constraint_shape):
+def get_nconstraint_components(constraint_shape):
     '''
     return the nconstraint components list as list of strings.
     '''
@@ -373,14 +370,14 @@ def get_dynamic_constraint_components(constraint_shape):
     return [c for c in components if c]
 
 
-def get_dynamic_constraint_nice_name(constraint_shape):
+def get_nconstraint_nice_name(constraint_shape):
     '''
     this is construct a name for a constraint transform based
     on is components names
     '''
     constraint_type = get_constraint_type(constraint_shape)
     type_name = DYNAMIC_CONTRAINT_TYPES[constraint_type]['short']
-    components = get_dynamic_constraint_components(constraint_shape)
+    components = get_nconstraint_components(constraint_shape)
     if len(components) > 1:
         name = type_name + '_' + '_to_'.join(components)
     elif len(components) == 1:
@@ -405,7 +402,7 @@ def get_constraint_type(constraint_shape):
     return cmds.getAttr(attribute)
 
 
-def set_dynamic_constraint_color(constraint_shape, r=0, g=0, b=0):
+def set_nconstraint_color(constraint_shape, r=0, g=0, b=0):
     '''
     this method is setting the overide color on the constraint parent
     '''
@@ -417,30 +414,30 @@ def set_dynamic_constraint_color(constraint_shape, r=0, g=0, b=0):
     cmds.setAttr(parent + '.overrideColorRGB', r, g, b)
 
 
-def list_dynamic_constraints(types=None, components=None):
+def list_nconstraints(types=None, components=None):
     '''
     this method list the dynamic constraint in the current maya scene.
     if types or components is specified, it will filter dynamic constraints
     :types: if the dynmic contraint 
     '''
     nodes = cmds.ls(type='dynamicConstraint')
-    dynamic_constraints = [DynamicConstraint(node) for node in nodes]
+    nconstraints = [DynamicConstraint(node) for node in nodes]
 
     if types is not None:
-        dynamic_constraints = [
-            dc for dc in dynamic_constraints if dc.type in types]
+        nconstraints = [
+            dc for dc in nconstraints if dc.type in types]
 
     if components is not None:
-        dynamic_constraints = [
-            dc for dc in dynamic_constraints
+        nconstraints = [
+            dc for dc in nconstraints
             if any([c in components for c in dc.components])]
 
-    return dynamic_constraints
+    return nconstraints
 
 
-def list_dynamic_constraints_components():
+def list_nconstraints_components():
     '''
     this is returning all components nodes linked to a dynamic constraint
     '''
-    dynamic_constraints = list_dynamic_constraints()
-    return list(set([c for dc in dynamic_constraints for c in dc.components]))
+    nconstraints = list_nconstraints()
+    return list(set([c for dc in nconstraints for c in dc.components]))
